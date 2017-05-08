@@ -3,36 +3,56 @@ import numpy as np
 import astropy.units as u
 from astropy.utils.console import ProgressBar
 from astropy.coordinates import Angle
+from spectral_cube.cube_utils import _map_context
+from itertools import izip
 
 
-def total_profile(cube, spatial_mask=None, verbose=True):
+def total_profile(cube, spatial_mask=None, chunk_size=10000,
+                  num_cores=1):
     '''
     Create the total profile over a region in a given spatial mask.
     '''
 
     posns = np.where(spatial_mask)
 
-    if verbose:
-        spec_iter = ProgressBar(posns[0].size)
-    else:
-        spec_iter = xrange(posns[0].size)
+    posns_y = np.array_split(posns[0], chunk_size)
+    posns_x = np.array_split(posns[1], chunk_size)
 
-    total_profile = np.zeros((cube.shape[0],)) * cube.unit
+    cubelist = ([(cube.filled_data[:, jj, ii],
+                 cube.mask.include(view=(slice(None), jj, ii)))
+                for jj, ii in izip(y_pos, x_pos)]
+                for y_pos, x_pos in izip(posns_y, posns_x))
 
-    for i in spec_iter:
-        y, x = posns[0][i], posns[1][i]
+    with _map_context(num_cores) as map:
 
-        spec = cube[:, y, x]
-        mask_spec = cube.mask.include(view=(slice(None), y, x))
-        valid = np.logical_and(np.isfinite(spec), mask_spec)
+        stacked_spectra = \
+            np.array([x for x in map(_masked_sum, cubelist)])
 
-        total_profile[valid] += spec[valid]
+    # Sum each chunk together
+    all_stacked = np.nansum(stacked_spectra, axis=0) * cube.unit
 
-    return total_profile
+    return all_stacked
+
+
+def _masked_sum(gen):
+    '''
+    Sum a list of spectra, applying their respective masks.
+    '''
+
+    for i, vals in enumerate(gen):
+
+        spec, mask = vals
+
+        if i == 0:
+            total_stack = np.zeros_like(spec)
+
+        total_stack[mask] += spec[mask]
+
+    return total_stack
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
-                    pa_bounds=None):
+                    pa_bounds=None, num_cores=1):
     '''
     Radially stack spectra.
     '''
@@ -78,7 +98,8 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
 
         spec_mask = np.logical_and(rad_mask, pa_mask)
 
-        stacked_spectra[ctr] = total_profile(cube, spec_mask)
+        stacked_spectra[ctr] = \
+            total_profile(cube, spec_mask, num_cores=num_cores)
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
