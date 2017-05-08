@@ -5,6 +5,7 @@ from astropy.utils.console import ProgressBar
 from astropy.coordinates import Angle
 from spectral_cube.cube_utils import _map_context
 from itertools import izip
+from scipy.stats import percentileofscore
 
 
 def total_profile(cube, spatial_mask=None, chunk_size=10000,
@@ -102,5 +103,56 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
             total_profile(cube, spec_mask, num_cores=num_cores)
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
+
+    return bin_centers, stacked_spectra
+
+
+def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
+                        max_val=None):
+    '''
+    Stack spectra in a cube based on the values in a given 2D image. For
+    example, give the peak temperature array to stack based on percentile of
+    the peak temperature distribution.
+
+    Parameters
+    ----------
+    cube : `~spectral_cube.SpectralCube`
+        Cube to stack from.
+    proj : `~spectral_cube.Projection` or `~spectral_cube.Slice`
+        A 2D image whose values to determine the percentiles to stack to.
+    dperc : float, optional
+        Percentile width of the bins.
+    num_cores : int, optional
+        Give the number of cores to run the operation on.
+    '''
+
+    # If given a min and max, mask out those values
+    if min_val is None:
+        min_val = np.nanmin(proj)
+    if max_val is None:
+        max_val = np.nanmin(proj)
+
+    vals_mask = np.logical_and(proj >= min_val, proj <= max_val)
+
+    unit = proj.unit
+    inneredge = np.nanpercentile(proj[vals_mask],
+                                 np.arange(0, 101, dperc)[:-1]) * unit
+    outeredge = np.nanpercentile(proj[vals_mask],
+                                 np.arange(0, 101, dperc)[1:]) * unit
+    # Add something small to the 100th percentile so it is used
+    outeredge[-1] += 1e-3 * unit
+
+    stacked_spectra = np.zeros((inneredge.size, cube.shape[0])) * cube.unit
+
+    for ctr, (p0, p1) in enumerate(zip(inneredge,
+                                       outeredge)):
+
+        print("On bin {} to {} K".format(p0, p1))
+
+        mask = np.logical_and(proj >= p0, proj < p1)
+
+        stacked_spectra[ctr] = total_profile(cube, mask, num_cores=num_cores)
+
+    bin_centers = inneredge + dperc / 2.
 
     return bin_centers, stacked_spectra
