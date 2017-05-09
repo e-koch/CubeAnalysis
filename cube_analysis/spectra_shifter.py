@@ -8,6 +8,8 @@ import os
 from astropy.utils.console import ProgressBar
 from itertools import izip, repeat
 
+from .io_utils import create_huge_fits
+
 
 def fourier_shift(x, shift, axis=0):
     '''
@@ -127,22 +129,13 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
     if save_shifted:
 
-        if os.path.exists(save_name):
-            raise Exception("The file name {} already "
-                            "exists".format(save_name))
-
-        output_fits = fits.StreamingHDU(save_name, new_header)
-
         if is_mask:
-            fill_plane = np.zeros_like(cube[0].value, dtype=np.int16)
+            dtype = np.int16
         else:
-            fill_plane = np.zeros_like(cube[0].value) * np.NaN
+            dtype = cube[:, 0, 0].dtype
 
-        for chan in xrange(cube.shape[0]):
-            output_fits.write(fill_plane)
-        output_fits.close()
-
-        output_fits = fits.open(save_name, mode='update')
+        output_fits = create_huge_fits(save_name, new_header, dtype=dtype,
+                                       return_hdu=True)
 
     if return_spectra:
         all_shifted_spectra = []
