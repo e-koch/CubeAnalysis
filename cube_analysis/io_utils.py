@@ -19,6 +19,9 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
     if "NAXIS" not in header and shape is None:
         raise TypeError("shape must be given when the header does not have "
                         "shape information ('NAXIS').")
+
+    if shape is None:
+        shape = (header["NAXIS3"], header["NAXIS2"], header["NAXIS1"])
     output_fits = fits.StreamingHDU(filename, header)
 
     # Not covering all possible dtypes.
