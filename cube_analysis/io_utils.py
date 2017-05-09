@@ -66,7 +66,7 @@ def save_to_huge_fits(filename, cube, verbose=True, overwrite=False,
         output_fits = fits.open(filename, mode='update')
     else:
         output_fits = create_huge_fits(filename, cube.header, verbose=verbose,
-                                       dtype=cube.dtype,
+                                       dtype=cube[:, 0, 0].dtype,
                                        return_hdu=True)
 
     for chan in xrange(cube.shape[0]):
