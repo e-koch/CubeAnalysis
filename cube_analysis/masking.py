@@ -17,6 +17,8 @@ from itertools import groupby, chain
 from operator import itemgetter
 import matplotlib.pyplot as p
 
+from .io_utils import save_to_huge_fits
+
 
 def pb_masking(cube_name, pb_file, pb_lim, output_folder):
     '''
@@ -42,7 +44,7 @@ def pb_masking(cube_name, pb_file, pb_lim, output_folder):
     masked_cube.write(os.path.join(masked_name), overwrite=True)
 
 
-def common_beam_convolve(cube_name, output_folder):
+def common_beam_convolve(cube_name, output_folder, is_huge=False):
     '''
     Convolve a VaryingResolutionSpectralCube to have a common beam size,
     defined by the largest channel beam.
@@ -59,12 +61,16 @@ def common_beam_convolve(cube_name, output_folder):
 
     # Remove path to the cube
     filename = os.path.split(cube_name)[1]
+    save_name = os.path.join(output_folder, filename)
 
-    cube.write(os.path.join(output_folder, filename), overwrite=True)
+    if is_huge:
+        save_to_huge_fits(save_name, cube, overwrite=True)
+    else:
+        cube.write(save_name, overwrite=True)
 
 
 def signal_masking(cube_name, output_folder, method='spectral_spatial',
-                   save_cube=False, **algorithm_kwargs):
+                   save_cube=False, is_huge=False, **algorithm_kwargs):
     '''
     Run a signal masking algorithm and save the resulting mask
     '''
@@ -93,9 +99,13 @@ def signal_masking(cube_name, output_folder, method='spectral_spatial',
     mask_name = \
         "{}_source_mask.fits".format(cube_name.rstrip(".fits"))
 
-    mask_hdu = fits.PrimaryHDU(mask.astype('>i2'), header=new_header)
-    mask_hdu.writeto(os.path.join(output_folder, mask_name),
-                     clobber=True)
+    save_name = os.path.join(output_folder, mask_name)
+
+    if is_huge:
+        save_to_huge_fits(save_name, mask.astype('>i2'), overwrite=True)
+    else:
+        mask_hdu = fits.PrimaryHDU(mask.astype('>i2'), header=new_header)
+        mask_hdu.writeto(save_name, overwrite=True)
 
 
 def make_signal_mask(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
