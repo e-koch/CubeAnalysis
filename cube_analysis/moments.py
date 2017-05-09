@@ -10,6 +10,7 @@ from itertools import izip
 from multiprocessing import Pool
 from astropy import log
 import os
+import glob
 
 
 def peak_velocity(spec):
@@ -111,3 +112,25 @@ def make_moments(cube_name, mask_name, output_folder, freq=None):
     peakvels.header["BITPIX"] = -32
     peakvels_name = "{}.peakvels.fits".format(cube_name.rstrip(".fits"))
     peakvels.write(peakvels_name, overwrite=True)
+
+
+def find_moment_names(path):
+    '''
+    Given a path, make global variables of the moment names.
+    '''
+
+    search_dict = {"Moment0": "mom0", "Moment1": "mom1", "LWidth": "lwidth",
+                   "Skewness": "skewness", "Kurtosis": "kurtosis",
+                   "PeakTemp": "peaktemps", "PeakVels": "peakvels"}
+
+    found_dict = {}
+
+    for filename in glob.glob(os.path.join(path, "*.fits")):
+
+        for key in search_dict:
+            if search_dict[key] in filename:
+                found_dict[key] = filename
+                search_dict.pop(key)
+                break
+
+    return found_dict
