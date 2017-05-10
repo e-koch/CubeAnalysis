@@ -7,7 +7,7 @@ import os
 
 
 def create_huge_fits(filename, header, shape=None, verbose=True,
-                     return_hdu=False, dtype=np.float):
+                     return_hdu=False, dtype=None):
     '''
     Create empty FITS files too large to fit into memory.
     '''
@@ -22,17 +22,10 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
 
     if shape is None:
         shape = (header["NAXIS3"], header["NAXIS2"], header["NAXIS1"])
-    output_fits = fits.StreamingHDU(filename, header)
 
     # Not covering all possible dtypes.
     if dtype is None:
-        if header["BITPIX"] == -64:
-            dtype = np.float64
-        if header["BITPIX"] == -32:
-            dtype = np.float32
-        else:
-            log.info("Data type given in the header assumed to be a float.")
-            dtype = np.float
+        dtype = fits.BITPIX2DTYPE[header['BITPIX']]
 
     # Iterate over the smallest axis
     min_axis = np.array(shape).argmin()
@@ -43,6 +36,8 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
         iterat = ProgressBar(shape[min_axis])
     else:
         iterat = xrange(shape[min_axis])
+
+    output_fits = fits.StreamingHDU(filename, header)
 
     for chan in iterat:
         output_fits.write(fill_plane)
