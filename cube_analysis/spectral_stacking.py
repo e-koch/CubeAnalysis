@@ -3,28 +3,30 @@ import numpy as np
 import astropy.units as u
 from astropy.utils.console import ProgressBar
 from astropy.coordinates import Angle
-from spectral_cube.cube_utils import _map_context
 from itertools import izip
 from scipy.stats import percentileofscore
 
+from .progressbar import _map_context
+
 
 def total_profile(cube, spatial_mask=None, chunk_size=10000,
-                  num_cores=1):
+                  num_cores=1, verbose=False):
     '''
     Create the total profile over a region in a given spatial mask.
     '''
 
     posns = np.where(spatial_mask)
 
-    posns_y = np.array_split(posns[0], chunk_size)
-    posns_x = np.array_split(posns[1], chunk_size)
+    posns_y = np.array_split(posns[0], [chunk_size])
+    posns_x = np.array_split(posns[1], [chunk_size])
 
     cubelist = ([(cube.filled_data[:, jj, ii],
                  cube.mask.include(view=(slice(None), jj, ii)))
                 for jj, ii in izip(y_pos, x_pos)]
                 for y_pos, x_pos in izip(posns_y, posns_x))
 
-    with _map_context(num_cores) as map:
+    with _map_context(num_cores, verbose=verbose,
+                      num_jobs=len(posns_y)) as map:
 
         stacked_spectra = \
             np.array([x for x in map(_masked_sum, cubelist)])
