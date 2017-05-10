@@ -79,6 +79,9 @@ def _register(args):
     elif plane.unit != u.K and targ_plane.unit == u.K:
         plane = plane.to(u.K, plane.beam.jtok_equiv(hi_freq))
 
+    plane_shape = plane.shape
+    targ_plane_shape = targ_plane.shape
+
     # Convolve whichever has the larger beam
     if targ_plane.beam != plane.beam:
         try:
@@ -93,7 +96,7 @@ def _register(args):
     # spatial axis
     maxoff = min(targ_plane.shape) * 0.2
     # Upsample by the ratio between the image sizes.
-    usfac = min(targ_plane.shape) / float(min(plane.shape))
+    usfac = min(targ_plane_shape) / float(min(plane_shape))
     if usfac < 1:
         usfac = 1 / usfac
     # register_image return dx, dy. To be consistent throughout this package,
