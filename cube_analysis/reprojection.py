@@ -4,6 +4,7 @@ from astropy.utils.console import ProgressBar
 from astropy import logger
 import os
 from itertools import repeat
+import numpy as np
 
 from .io_utils import create_huge_fits, save_to_huge_fits
 
@@ -39,6 +40,12 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     # Spectrally interpolate
     logger.info("Spectral interpolation")
     cube = cube.spectral_interpolate(targ_cube.spectral_axis)
+
+    # Make sure the spectral axes are the same (and not reversed).
+    if not np.allclose(cube.spectral_axis.value,
+                       targ_cube.spectral_axis.value):
+        raise Warning("The spectral axes do not match.")
+
     # Write out the spectrally interpolated cube
     if save_spectral:
         logger.info("Saving the spectrally interpolated cube.")
