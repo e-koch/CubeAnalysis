@@ -41,8 +41,6 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
 
     for chan in iterat:
         output_fits.write(fill_plane)
-        if verbose:
-            iterat.update()
 
     output_fits.close()
 
