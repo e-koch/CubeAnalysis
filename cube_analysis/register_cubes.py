@@ -123,8 +123,11 @@ def spatial_shift_cube(cube, dy, dx, verbose=True, save_shifted=True,
         newcube = np.empty(cube.shape, dtype=cube[:1, 0, 0].dtype)
         newmask = np.empty(cube.shape, dtype=bool)
 
-    channels = np.arange(cube.shape[0])
-    chunked_channels = np.array_split(channels, [chunk])
+    num_chans = cube.shape[0]
+    channels = np.arange(num_chans)
+    chunked_channels = \
+        np.array_split(channels,
+                       [chunk * i for i in xrange(num_chans / chunk)])
     if chunked_channels[-1].size == 0:
         chunked_channels = chunked_channels[:-1]
 

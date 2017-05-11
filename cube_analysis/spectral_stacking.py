@@ -17,8 +17,17 @@ def total_profile(cube, spatial_mask=None, chunk_size=10000,
 
     posns = np.where(spatial_mask)
 
-    posns_y = np.array_split(posns[0], [chunk_size])
-    posns_x = np.array_split(posns[1], [chunk_size])
+    num_specs = posns[0].size
+    channels = np.arange(num_specs)
+    chunksidx = \
+        np.array_split(channels,
+                       [chunk_size * i for i in
+                        xrange(num_specs / chunk_size)])
+    if chunksidx[-1].size == 0:
+        chunksidx = chunksidx[:-1]
+
+    posns_y = np.array_split(posns[0], chunksidx)
+    posns_x = np.array_split(posns[1], chunksidx)
 
     cubelist = ([(cube.filled_data[:, jj, ii],
                  cube.mask.include(view=(slice(None), jj, ii)))

@@ -43,8 +43,11 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
     else:
         newcube = np.empty(cube_hi.shape, dtype=cube_hi[:1, 0, 0].dtype)
 
-    channels = np.arange(cube_hi.shape[0])
-    chunked_channels = np.array_split(channels, [chunk])
+    num_chans = cube_hi.shape[0]
+    channels = np.arange(num_chans)
+    chunked_channels = \
+        np.array_split(channels,
+                       [chunk * i for i in xrange(num_chans / chunk)])
     if chunked_channels[-1].size == 0:
         chunked_channels = chunked_channels[:-1]
 
