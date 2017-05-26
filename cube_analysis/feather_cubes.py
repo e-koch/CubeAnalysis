@@ -132,7 +132,8 @@ def _feather(args):
     return chan, feathered
 
 
-def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,):
+def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,
+                         num_cores=1, chunk=100):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
     '''
@@ -143,17 +144,48 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,):
         raise Warning("The spectral axes do not match. Spectrally regrid the "
                       "cubes to be the same before feathering.")
 
-    ratios = []
+    num_chans = cube_hi.shape[0]
+    channels = np.arange(num_chans)
+    chunked_channels = \
+        np.array_split(channels,
+                       [chunk * i for i in xrange(num_chans / chunk)])
+    if chunked_channels[-1].size == 0:
+        chunked_channels = chunked_channels[:-1]
+
     radii = []
+    ratios = []
 
-    for i in ProgressBar(cube_hi.spectral_axis.size):
+    for i, chunk_chans in enumerate(chunked_channels):
 
-        out = feather_compare(cube_hi[i].hdu, cube_lo[i].hdu,
-                              return_ratios=True, doplot=False,
-                              LAS=LAS, SAS=cube_lo[i].beam.major.to(u.arcsec),
-                              lowresfwhm=cube_lo[i].beam.major.to(u.arcsec))
+        log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
-        radii.append(out[0])
-        ratios.append(out[1])
+        changen = ((chan, cube_hi[chan], cube_lo[chan],
+                    LAS) for chan in chunk_chans)
+
+        with _map_context(num_cores, verbose=verbose)as map:
+            output = map(_compare, changen)
+
+        chan_out = np.array([out[0] for out in output])
+
+        for jj in chan_out.argsort():
+
+            radii.append(output[jj][0])
+            ratios.append(output[jj][1])
 
     return radii, ratios
+
+
+def _compare(args):
+
+    chan, plane_hi, plane_lo, LAS = args
+
+    hi_beam = plane_hi.beam
+    lo_beam = plane_lo.beam
+
+    out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(1.42040575177 * u.GHz)).hdu,
+                          plane_lo.hdu,
+                          return_ratios=True, doplot=False,
+                          LAS=LAS, SAS=lo_beam.major.to(u.arcsec),
+                          lowresfwhm=lo_beam.major.to(u.arcsec))
+
+    return chan, out
