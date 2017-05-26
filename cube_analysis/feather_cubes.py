@@ -132,8 +132,8 @@ def _feather(args):
     return chan, feathered
 
 
-def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,
-                         num_cores=1, chunk=100):
+def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
+                         verbose=True, num_cores=1, chunk=100):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
     '''
@@ -155,12 +155,17 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,
     radii = []
     ratios = []
 
+    if lowresfwhm is None:
+        lowresfwhm = cube_lo.beam.major.to(u.arcsec)
+    else:
+        lowresfwhm = lowresfwhm.to(u.arcsec)
+
     for i, chunk_chans in enumerate(chunked_channels):
 
         log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
         changen = ((chan, cube_hi[chan], cube_lo[chan],
-                    LAS) for chan in chunk_chans)
+                    LAS, lowresfwhm) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose)as map:
             output = map(_compare, changen)
@@ -169,23 +174,22 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,
 
         for jj in chan_out.argsort():
 
-            radii.append(output[jj][0])
-            ratios.append(output[jj][1])
+            radii.append(output[jj][1][0])
+            ratios.append(output[jj][1][1])
 
     return radii, ratios
 
 
 def _compare(args):
 
-    chan, plane_hi, plane_lo, LAS = args
+    chan, plane_hi, plane_lo, LAS, lowresfwhm = args
 
     hi_beam = plane_hi.beam
-    lo_beam = plane_lo.beam
 
     out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(1.42040575177 * u.GHz)).hdu,
                           plane_lo.hdu,
                           return_ratios=True, doplot=False,
-                          LAS=LAS, SAS=lo_beam.major.to(u.arcsec),
-                          lowresfwhm=lo_beam.major.to(u.arcsec))
+                          LAS=LAS, SAS=lowresfwhm,
+                          lowresfwhm=lowresfwhm)
 
     return chan, out
