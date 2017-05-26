@@ -6,7 +6,7 @@ Some of these *should* be moved into uvcombine in good time.
 '''
 
 from spectral_cube import SpectralCube
-from uvcombine.uvcombine import feather_simple
+from uvcombine.uvcombine import feather_simple, feather_compare
 from astropy import log
 import astropy.units as u
 
@@ -14,7 +14,7 @@ import numpy as np
 
 
 from .io_utils import create_huge_fits
-from .progressbar import _map_context
+from .progressbar import _map_context, ProgressBar
 
 
 def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
@@ -130,3 +130,30 @@ def _feather(args):
     feathered[np.isnan(plane_hi[0])] = np.NaN
 
     return chan, feathered
+
+
+def feather_compare_cube(cube_hi, cube_lo, LAS, verbose=True,):
+    '''
+    Record the ratios of the flux in the overlap region between the cubes.
+    '''
+
+    # Ensure the spectral axes are the same.
+    if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
+                       cube_lo.spectral_axis.value):
+        raise Warning("The spectral axes do not match. Spectrally regrid the "
+                      "cubes to be the same before feathering.")
+
+    ratios = []
+    radii = []
+
+    for i in ProgressBar(cube_hi.spectral_axis.size):
+
+        out = feather_compare(cube_hi[i].hdu, cube_lo[i].hdu,
+                              return_ratios=True, doplot=False,
+                              LAS=LAS, SAS=cube_lo[i].beam.major.to(u.arcsec),
+                              lowresfwhm=cube_lo[i].beam.major.to(u.arcsec))
+
+        radii.append(out[0])
+        ratios.append(out[1])
+
+    return radii, ratios
