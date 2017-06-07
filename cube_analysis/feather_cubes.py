@@ -151,9 +151,13 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
                        [chunk * i for i in xrange(num_chans / chunk)])
     if chunked_channels[-1].size == 0:
         chunked_channels = chunked_channels[:-1]
+    if chunked_channels[0].size == 0:
+        chunked_channels = chunked_channels[1:]
 
     radii = []
     ratios = []
+    highres_pts = []
+    lowres_pts = []
 
     if lowresfwhm is None:
         lowresfwhm = cube_lo.beam.major.to(u.arcsec)
@@ -176,8 +180,10 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
 
             radii.append(output[jj][1][0])
             ratios.append(output[jj][1][1])
+            highres_pts.append(output[jj][1][2])
+            lowres_pts.append(output[jj][1][3])
 
-    return radii, ratios
+    return radii, ratios, highres_pts, lowres_pts
 
 
 def _compare(args):
