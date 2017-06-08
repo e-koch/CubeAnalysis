@@ -194,7 +194,7 @@ def _compare(args):
 
     out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(1.42040575177 * u.GHz)).hdu,
                           plane_lo.hdu,
-                          return_ratios=True, doplot=False,
+                          return_samples=True, doplot=False,
                           LAS=LAS, SAS=lowresfwhm,
                           lowresfwhm=lowresfwhm)
 
