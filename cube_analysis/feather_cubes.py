@@ -44,12 +44,7 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
         newcube = np.empty(cube_hi.shape, dtype=cube_hi[:1, 0, 0].dtype)
 
     num_chans = cube_hi.shape[0]
-    channels = np.arange(num_chans)
-    chunked_channels = \
-        np.array_split(channels,
-                       [chunk * i for i in xrange(num_chans / chunk)])
-    if chunked_channels[-1].size == 0:
-        chunked_channels = chunked_channels[:-1]
+    chunked_channels = get_channel_chunks(num_chans, chunk)
 
     for i, chunk_chans in enumerate(chunked_channels):
 
@@ -146,14 +141,7 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
                       "cubes to be the same before feathering.")
 
     num_chans = cube_hi.shape[0]
-    channels = np.arange(num_chans)
-    chunked_channels = \
-        np.array_split(channels,
-                       [chunk * i for i in xrange(num_chans / chunk)])
-    if chunked_channels[-1].size == 0:
-        chunked_channels = chunked_channels[:-1]
-    if chunked_channels[0].size == 0:
-        chunked_channels = chunked_channels[1:]
+    chunked_channels = get_channel_chunks(num_chans, chunk)
 
     radii = []
     ratios = []
@@ -200,3 +188,43 @@ def _compare(args):
                           lowresfwhm=lowresfwhm)
 
     return chan, out
+
+
+def flux_recovery(cube_hi, cube_lo, freq=1.42040575177 * u.GHz, verbose=False,
+                  num_cores=1, chunk=100, mask=None):
+    '''
+    Calculate the fraction of flux recovered between the high-resolution
+    (interferometer) cube and the low-resolution (single-dish) cube.
+    '''
+
+    # Ensure the spectral axes are the same.
+    if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
+                       cube_lo.spectral_axis.value):
+        raise Warning("The spectral axes do not match. Spectrally regrid the "
+                      "cubes to be the same before feathering.")
+
+
+def get_channel_chunks(num_chans, chunk):
+    '''
+    Parameters
+    ----------
+    num_chans : int
+        Number of channels
+    chunk : int
+        Size of chunks
+
+    Returns
+    -------
+    chunked_channels : list of np.ndarray
+        List of channels in chunks of the given size.
+    '''
+    channels = np.arange(num_chans)
+    chunked_channels = \
+        np.array_split(channels,
+                       [chunk * i for i in xrange(num_chans / chunk)])
+    if chunked_channels[-1].size == 0:
+        chunked_channels = chunked_channels[:-1]
+    if chunked_channels[0].size == 0:
+        chunked_channels = chunked_channels[1:]
+
+    return chunked_channels
