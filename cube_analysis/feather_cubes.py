@@ -190,7 +190,8 @@ def _compare(args):
     return chan, out
 
 
-def flux_recovery(cube_hi, cube_lo, freq=1.42040575177 * u.GHz, verbose=False,
+def flux_recovery(cube_hi, cube_lo, frequency=1.42040575177 * u.GHz,
+                  verbose=True, doplot=False,
                   num_cores=1, chunk=100, mask=None):
     '''
     Calculate the fraction of flux recovered between the high-resolution
@@ -202,6 +203,78 @@ def flux_recovery(cube_hi, cube_lo, freq=1.42040575177 * u.GHz, verbose=False,
                        cube_lo.spectral_axis.value):
         raise Warning("The spectral axes do not match. Spectrally regrid the "
                       "cubes to be the same before feathering.")
+
+    if mask is not None:
+        if mask.shape != cube_hi[0].shape:
+            raise ValueError("mask must have the same shape as the "
+                             "high-resolution cube.")
+
+    num_chans = cube_hi.shape[0]
+    chunked_channels = get_channel_chunks(num_chans, chunk)
+
+    total_hires = np.empty(num_chans) * u.Jy
+    total_lores = np.empty(num_chans) * u.Jy
+
+    for i, chunk_chans in enumerate(chunked_channels):
+
+        log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
+
+        changen = ((chan, cube_hi[chan], cube_lo[chan],
+                    frequency, mask) for chan in chunk_chans)
+
+        with _map_context(num_cores, verbose=verbose)as map:
+            output = map(_totalplanes, changen)
+
+        chan_out = np.array([out[0] for out in output])
+
+        for jj in chan_out.argsort():
+
+            total_hires[jj] = output[jj][1]
+            total_lores[jj] = output[jj][2]
+
+    if doplot:
+        import matplotlib.pyplot as plt
+        plt.subplot(121)
+        plt.plot(total_hires.value, label='High-res')
+        plt.plot(total_lores.value, label='Low-res')
+        plt.ylabel("Total Intensity (Jy)")
+        plt.legend()
+        plt.subplot(122)
+        plt.plot(total_hires.value / total_lores.value)
+        plt.ylabel("Fraction of recovered")
+        plt.xlabel("Channel")
+
+    return total_hires, total_lores
+
+
+def _totalplanes(args):
+
+    chan, plane_hi, plane_lo, freq, mask = args
+
+    if mask is not None:
+        if not plane_hi.wcs.wcs.compare(plane_lo.wcs.wcs):
+            # Reproject the low resolution onto the high
+
+            plane_lo = plane_lo.reproject(plane_hi.header)
+
+        # !! Update to Jy/bm (or equiv) when spectral-cube can handle it
+        total_hi = \
+            np.nansum(plane_hi[mask].to(u.Jy, plane_hi.beam.jtok_equiv(freq)))
+        total_lo = \
+            np.nansum(plane_lo[mask].to(u.Jy, plane_lo.beam.jtok_equiv(freq)))
+    else:
+        total_hi = \
+            np.nansum(plane_hi.to(u.Jy, plane_hi.beam.jtok_equiv(freq)))
+        total_lo = \
+            np.nansum(plane_lo.to(u.Jy, plane_lo.beam.jtok_equiv(freq)))
+
+    # Convert from Jy/beam to actual Jy
+    total_hi *= (1 / plane_hi.beam.sr.to(u.deg**2)) * \
+        (plane_hi.header["CDELT2"] * u.deg)**2
+    total_lo *= (1 / plane_lo.beam.sr.to(u.deg**2)) * \
+        (plane_lo.header["CDELT2"] * u.deg)**2
+
+    return chan, total_hi, total_lo
 
 
 def get_channel_chunks(num_chans, chunk):
