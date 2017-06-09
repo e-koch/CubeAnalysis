@@ -229,8 +229,8 @@ def flux_recovery(cube_hi, cube_lo, frequency=1.42040575177 * u.GHz,
 
         for jj in chan_out.argsort():
 
-            total_hires[jj] = output[jj][1]
-            total_lores[jj] = output[jj][2]
+            total_hires[chan_out[jj]] = output[jj][1]
+            total_lores[chan_out[jj]] = output[jj][2]
 
     if doplot:
         import matplotlib.pyplot as plt
