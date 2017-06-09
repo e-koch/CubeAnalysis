@@ -14,7 +14,7 @@ import numpy as np
 
 
 from .io_utils import create_huge_fits
-from .progressbar import _map_context, ProgressBar
+from .progressbar import _map_context
 
 
 def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
@@ -58,7 +58,7 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
         changen = ((chan, cube_hi[chan:chan + 1], cube_lo[chan:chan + 1],
                     frequency, feather_kwargs) for chan in chunk_chans)
 
-        with _map_context(num_cores, verbose=verbose)as map:
+        with _map_context(num_cores, verbose=verbose) as map:
             log.info("Feathering")
             output = map(_feather, changen)
 
@@ -133,6 +133,7 @@ def _feather(args):
 
 
 def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
+                         frequency=1.42040575177 * u.GHz,
                          verbose=True, num_cores=1, chunk=100):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
@@ -169,7 +170,7 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
         log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
         changen = ((chan, cube_hi[chan], cube_lo[chan],
-                    LAS, lowresfwhm) for chan in chunk_chans)
+                    LAS, lowresfwhm, frequency) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose)as map:
             output = map(_compare, changen)
@@ -188,11 +189,11 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
 
 def _compare(args):
 
-    chan, plane_hi, plane_lo, LAS, lowresfwhm = args
+    chan, plane_hi, plane_lo, LAS, lowresfwhm, freq = args
 
     hi_beam = plane_hi.beam
 
-    out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(1.42040575177 * u.GHz)).hdu,
+    out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(freq)).hdu,
                           plane_lo.hdu,
                           return_samples=True, doplot=False,
                           LAS=LAS, SAS=lowresfwhm,
