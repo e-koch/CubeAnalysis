@@ -12,6 +12,8 @@ from astropy import log
 import os
 import glob
 
+from .feather_cubes import get_channel_chunks
+
 
 def peak_velocity(spec):
     '''
@@ -95,14 +97,22 @@ def make_moments(cube_name, mask_name, output_folder, freq=None):
 
     posns = np.where(source_mask.sum(0) > 0)
 
-    pool = Pool(6)
-    output = pool.map(peak_velocity, (cube[:, y, x] for y, x in izip(*posns)))
+    chunk_idx = get_channel_chunks(posns[0].size, 5000)
 
-    pool.close()
-    pool.join()
+    for chunk in chunk_idx:
 
-    for out, y, x in izip(output, *posns):
-        peakvels[y, x] = out
+        y_posn = posns[0][chunk]
+        x_posn = posns[1][chunk]
+
+        gener = (cube[:, y, x] for y, x in izip(y_posn, x_posn))
+
+        pool = Pool(6)
+        output = pool.map(peak_velocity, gener)
+        pool.close()
+        pool.join()
+
+        for out, y, x in izip(output, y_posn, x_posn):
+            peakvels[y, x] = out
 
     peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
     # Make sure there are no garbage points outside of the cube spectral range
