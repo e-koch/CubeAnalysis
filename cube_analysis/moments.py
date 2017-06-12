@@ -8,8 +8,6 @@ from astropy.io import fits
 from astropy import log
 from scipy.signal import medfilt
 from itertools import izip
-from multiprocessing import Pool
-from astropy import log
 import os
 import glob
 
