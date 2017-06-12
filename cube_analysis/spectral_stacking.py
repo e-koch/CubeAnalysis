@@ -15,7 +15,10 @@ def total_profile(cube, spatial_mask=None, chunk_size=10000,
     Create the total profile over a region in a given spatial mask.
     '''
 
-    posns = np.where(spatial_mask)
+    if spatial_mask is None:
+        posns = np.indices(cube[0].shape)
+    else:
+        posns = np.where(spatial_mask)
 
     num_specs = posns[0].size
     channels = np.arange(num_specs)
