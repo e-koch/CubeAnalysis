@@ -15,17 +15,25 @@ from .feather_cubes import get_channel_chunks
 from .progressbar import _map_context
 
 
-def peak_velocity(spec):
+def _peak_velocity(args):
     '''
     Return the velocity at the peak of a spectrum.
     '''
-    smooth_size = 31
-    argmax = np.argmax(medfilt(spec.value, smooth_size))
-    return spec.spectral_axis[argmax]
+
+    spec, smooth_size = args
+
+    # smooth_size = 31
+
+    if smooth_size is None:
+        return spec.spectral_axis[np.argmax(spec.value)]
+    else:
+        argmax = np.argmax(medfilt(spec.value, smooth_size))
+        return spec.spectral_axis[argmax]
 
 
 def make_moments(cube_name, mask_name, output_folder, freq=None,
-                 num_cores=1, verbose=False, chunk_size=1e4):
+                 num_cores=1, verbose=False, chunk_size=1e4,
+                 smooth_size=None):
     '''
     Create the moment arrays.
     '''
@@ -98,6 +106,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     posns = np.where(source_mask.sum(0) > 0)
 
+    chunk_size = int(chunk_size)
     chunk_idx = get_channel_chunks(posns[0].size, chunk_size)
 
     for i, chunk in enumerate(chunk_idx):
@@ -107,10 +116,10 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
         y_posn = posns[0][chunk]
         x_posn = posns[1][chunk]
 
-        gener = (cube[:, y, x] for y, x in izip(y_posn, x_posn))
+        gener = ((cube[:, y, x], smooth_size) for y, x in izip(y_posn, x_posn))
 
         with _map_context(num_cores, verbose=verbose) as map:
-            output = map(peak_velocity, gener)
+            output = map(_peak_velocity, gener)
 
         for out, y, x in izip(output, y_posn, x_posn):
             peakvels[y, x] = out
