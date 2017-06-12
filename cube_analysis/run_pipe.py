@@ -26,7 +26,7 @@ def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
     #         raise OSError("Remove the folder {} before running."
     #                       .format(output_folder))
 
-    tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    tstamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log.info("Starting PB masking at {}".format(tstamp))
     if pb_file is None:
         log.info("No PB file given. No PB masking applied.")
