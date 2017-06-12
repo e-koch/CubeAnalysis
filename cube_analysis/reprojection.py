@@ -1,7 +1,7 @@
 
 from spectral_cube import SpectralCube
 from astropy.utils.console import ProgressBar
-from astropy import logger
+from astropy import log
 import os
 from itertools import repeat
 import numpy as np
@@ -36,9 +36,11 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
             raise AttributeError("The cube does not have an associated "
                                  "beam. `common_beam` requires a beam object "
                                  "for both cubes.")
+    else:
+        beams = repeat(None)
 
     # Spectrally interpolate
-    logger.info("Spectral interpolation")
+    log.info("Spectral interpolation")
     cube = cube.spectral_interpolate(targ_cube.spectral_axis)
 
     # Make sure the spectral axes are the same (and not reversed).
@@ -48,7 +50,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # Write out the spectrally interpolated cube
     if save_spectral:
-        logger.info("Saving the spectrally interpolated cube.")
+        log.info("Saving the spectrally interpolated cube.")
         spec_savename = \
             "{}_spectralregrid.fits".format(os.path.splitext(output_cubename)[0])
         spec_savename = os.path.join(output_folder, spec_savename)
@@ -80,13 +82,13 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     # Build up the reprojected cube per channel
     save_name = os.path.join(output_folder, output_cubename)
 
-    logger.info("Creating new FITS file.")
+    log.info("Creating new FITS file.")
     output_fits = create_huge_fits(save_name, new_header, dtype=None,
                                    return_hdu=True)
 
     targ_header = targ_cube[0].header
     targ_dtype = targ_cube[:1, 0, 0].dtype
-    logger.info("Reprojecting and writing.")
+    log.info("Reprojecting and writing.")
     for chan, beam in zip(ProgressBar(cube.shape[0]), beams):
         proj = cube[chan].reproject(targ_header).value.astype(targ_dtype)
         if common_beam:
