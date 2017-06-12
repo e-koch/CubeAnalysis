@@ -85,6 +85,15 @@ def signal_masking(cube_name, output_folder, method='spectral_spatial',
         else:
             noise_map = algorithm_kwargs['noise_map']
             algorithm_kwargs.pop('noise_map')
+
+        if isinstance(noise_map, basestring):
+            noise_map = fits.open(noise_map)[0].data
+        elif isinstance(noise_map, np.ndarray):
+            pass
+        else:
+            raise TypeError("noise_map must be a file name or an array. Found"
+                            " type {}".format(type(noise_map)))
+
         masked_cube, mask = simple_masking(cube, noise_map, **algorithm_kwargs)
     else:
         raise ValueError("method must be 'spectral_spatial' or "
