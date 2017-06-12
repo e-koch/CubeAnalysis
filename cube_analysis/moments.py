@@ -5,6 +5,7 @@ from spectral_cube.cube_utils import average_beams
 import numpy as np
 import astropy.units as u
 from astropy.io import fits
+from astropy import log
 from scipy.signal import medfilt
 from itertools import izip
 from multiprocessing import Pool
@@ -13,6 +14,7 @@ import os
 import glob
 
 from .feather_cubes import get_channel_chunks
+from .progressbar import _map_context
 
 
 def peak_velocity(spec):
@@ -24,7 +26,8 @@ def peak_velocity(spec):
     return spec.spectral_axis[argmax]
 
 
-def make_moments(cube_name, mask_name, output_folder, freq=None):
+def make_moments(cube_name, mask_name, output_folder, freq=None,
+                 num_cores=1, verbose=False, chunk_size=1e4):
     '''
     Create the moment arrays.
     '''
@@ -97,19 +100,19 @@ def make_moments(cube_name, mask_name, output_folder, freq=None):
 
     posns = np.where(source_mask.sum(0) > 0)
 
-    chunk_idx = get_channel_chunks(posns[0].size, 5000)
+    chunk_idx = get_channel_chunks(posns[0].size, chunk_size)
 
-    for chunk in chunk_idx:
+    for i, chunk in enumerate(chunk_idx):
+
+        log.info("On chunk {0} of {1}".format(i + 1, len(chunk_idx)))
 
         y_posn = posns[0][chunk]
         x_posn = posns[1][chunk]
 
         gener = (cube[:, y, x] for y, x in izip(y_posn, x_posn))
 
-        pool = Pool(6)
-        output = pool.map(peak_velocity, gener)
-        pool.close()
-        pool.join()
+        with _map_context(num_cores, verbose=verbose) as map:
+            output = map(peak_velocity, gener)
 
         for out, y, x in izip(output, y_posn, x_posn):
             peakvels[y, x] = out
