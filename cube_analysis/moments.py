@@ -33,7 +33,7 @@ def _peak_velocity(args):
 
 def make_moments(cube_name, mask_name, output_folder, freq=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
-                 smooth_size=None):
+                 in_memory=False, smooth_size=None):
     '''
     Create the moment arrays.
     '''
@@ -116,7 +116,12 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
         y_posn = posns[0][chunk]
         x_posn = posns[1][chunk]
 
-        gener = ((cube[:, y, x], smooth_size) for y, x in izip(y_posn, x_posn))
+        if in_memory:
+            gener = [(cube[:, y, x], smooth_size)
+                     for y, x in izip(y_posn, x_posn)]
+        else:
+            gener = ((cube[:, y, x], smooth_size)
+                     for y, x in izip(y_posn, x_posn))
 
         with _map_context(num_cores, verbose=verbose) as map:
             output = map(_peak_velocity, gener)
