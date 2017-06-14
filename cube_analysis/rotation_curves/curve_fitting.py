@@ -22,7 +22,7 @@ def vcirc(r, *pars):
     return numer / denom
 
 
-def generate_vrot_model(table_name, model=vcirc, verbose=True):
+def generate_vrot_model(table_name, model=vcirc, verbose=False):
     '''
     Parameters
     ----------
