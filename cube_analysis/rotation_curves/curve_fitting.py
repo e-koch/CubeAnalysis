@@ -2,11 +2,8 @@
 import numpy as np
 from scipy.optimize import curve_fit
 from astropy.table import Table
-import os
-from astropy.io import fits
 import astropy.units as u
 import astropy.wcs as wcs
-import matplotlib.pyplot as p
 from galaxies import Galaxy
 
 
