@@ -10,10 +10,14 @@ import numpy as np
 from astropy.io import fits
 from glob import glob
 from warnings import warn
+from galaxies import Galaxy
+
+from .curve_fitting import return_smooth_model, generate_vrot_model
+from .update_galaxy_params import update_galaxy_params
 
 
 def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
-                fit_model=False):
+                fit_model=True, gal=None):
     '''
     This is a wrapper to make running DiskFit and processing its output
     easier (at least when already working in a python environment).
@@ -43,6 +47,11 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
         WCS information in the headers.
     '''
 
+    if fit_model:
+        if not isinstance(gal, Galaxy):
+            raise ValueError("When fit_model is enabled, a Galaxy class must "
+                             "be passed with `gal`.")
+
     # Due to the 100 character limit, copy the parameter file into the data path
     shutil.copyfile(param_file,
                     os.path.join(data_path, os.path.basename(param_file)))
@@ -61,6 +70,7 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
 
     # Output is on 8th line
     output_folder = content[7].split("'")[1].split("/")[0]
+    moment_file = os.path.join(data_path, content[3].split("'")[1])
 
     if os.path.exists(output_folder):
         if not overwrite:
@@ -142,8 +152,9 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
 
     data = np.array(data)
     # Sometimes Vt comes out as negative, due to PA being flipped by 180
-    # degrees
-    if (data[:, 2] < 0).all():
+    # degrees. The first few points may have +/- values within the error
+    # so determine by checking the last 10 points.
+    if (data[-10:, 2] < 0).all():
         data[:, 2] = np.abs(data[:, 2])
 
         # Flip PA by 180 deg.
@@ -182,6 +193,36 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
         hdu[0].header = new_header
         hdu.flush()
         hdu.close()
+
+    if fit_model:
+        # Generate a smooth model of the rotation curve
+        update_galaxy_params(gal, df)
+
+        pars, pcov = generate_vrot_model(df)
+
+        smooth_model = return_smooth_model(df, header, gal)
+
+        fit_comment = "Smooth rotation model of DISKFIT output. " \
+            "Uses Eq.5 from Meidt et al. 2008. n={0:.2f}+/-{1:.2f}, " \
+            "Vmax={2:.2f}+/-{3:.2f} km/s, rmax={4:.2f}+/-{5:.2f} pix".\
+            format(pars[0], np.sqrt(pcov[0, 0]), pars[1], np.sqrt(pcov[1, 1]),
+                   pars[2], np.sqrt(pcov[2, 2]))
+
+        bunit = "m / s"
+
+        # Save the smooth model
+        smooth_hdu = fits.PrimaryHDU(smooth_model, header=header)
+        smooth_hdu.header["BUNIT"] = bunit
+        smooth_hdu.header["COMMENT"] = fit_comment
+        smooth_hdu.writeto("rad.fitmod.fits", overwrite=True)
+
+        # Also save the residuals from the smooth model
+        moment_map = fits.open(moment_file)[0]
+        smoothres_hdu = fits.PrimaryHDU(moment_map.data - smooth_model,
+                                        header=header)
+        smoothres_hdu.header["BUNIT"] = bunit
+        smoothres_hdu.header["COMMENT"] = fit_comment
+        smoothres_hdu.writeto("rad.fitmod.fits", overwrite=True)
 
     # Return the the initial directory
     os.chdir(orig_direc)
