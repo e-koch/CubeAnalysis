@@ -1,1 +1,3 @@
 from run_diskfit import run_diskfit
+from curve_fitting import generate_vrot_model, return_smooth_model
+from update_galaxy_params import update_galaxy_params
