@@ -2,9 +2,7 @@
 from astropy.io import fits
 from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
 from spectral_cube.cube_utils import largest_beam
-from astropy.utils.console import ProgressBar
 import os
-import astropy.units as u
 from astropy import log
 from astropy.convolution import Box1DKernel
 from signal_id import Noise
@@ -12,7 +10,6 @@ from scipy import ndimage as nd
 from astropy.wcs.utils import proj_plane_pixel_scales
 import skimage.morphology as mo
 import numpy as np
-from radio_beam import Beam
 from itertools import groupby, chain
 from operator import itemgetter
 from astropy.stats import mad_std
@@ -20,6 +17,7 @@ from scipy.signal import medfilt
 import matplotlib.pyplot as p
 
 from .io_utils import save_to_huge_fits
+from .progressbar import ProgressBar
 
 
 def pb_masking(cube_name, pb_file, pb_lim, output_folder):
