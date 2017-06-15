@@ -7,7 +7,7 @@ import os
 
 
 def create_huge_fits(filename, header, shape=None, verbose=True,
-                     return_hdu=False, dtype=None):
+                     return_hdu=False, dtype=None, fill_nan=False):
     '''
     Create empty FITS files too large to fit into memory.
     '''
@@ -23,14 +23,18 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
     if shape is None:
         shape = (header["NAXIS3"], header["NAXIS2"], header["NAXIS1"])
 
-    # Not covering all possible dtypes.
     if dtype is None:
         dtype = fits.BITPIX2DTYPE[header['BITPIX']]
+    else:
+        # Make sure the header has the right BITPIX
+        header['BITPIX'] = fits.DTYPE2BITPIX[dtype]
 
     # Iterate over the smallest axis
     min_axis = np.array(shape).argmin()
     plane_shape = [sh for i, sh in enumerate(shape) if i != min_axis]
-    fill_plane = np.zeros(plane_shape, dtype=dtype) * np.NaN
+    fill_plane = np.zeros(plane_shape, dtype=dtype)
+    if fill_nan:
+        fill_plane *= np.NaN
 
     if verbose:
         iterat = ProgressBar(shape[min_axis])

@@ -130,12 +130,12 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
     if save_shifted:
 
         if is_mask:
-            dtype = np.int16
+            dtype = 'int16'
         else:
             dtype = cube[:, 0, 0].dtype
 
         output_fits = create_huge_fits(save_name, new_header, dtype=dtype,
-                                       return_hdu=True)
+                                       return_hdu=True, fill_nan=not is_mask)
 
     if return_spectra:
         all_shifted_spectra = []
