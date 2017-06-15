@@ -69,7 +69,7 @@ def common_beam_convolve(cube_name, output_folder, is_huge=False):
         cube.write(save_name, overwrite=True)
 
 
-def signal_masking(cube_name, output_folder, method='spectral_spatial',
+def signal_masking(cube_name, output_folder, method='ppv_connectivity',
                    save_cube=False, is_huge=False, **algorithm_kwargs):
     '''
     Run a signal masking algorithm and save the resulting mask
@@ -77,8 +77,8 @@ def signal_masking(cube_name, output_folder, method='spectral_spatial',
 
     cube = SpectralCube.read(cube_name)
 
-    if method == "spectral_spatial":
-        masked_cube, mask = make_signal_mask(cube, **algorithm_kwargs)
+    if method == "ppv_connectivity":
+        masked_cube, mask = ppv_connectivity_masking(cube, **algorithm_kwargs)
     elif method == "ppv_dilation":
         if 'noise_map' not in algorithm_kwargs:
             raise ValueError("Must specify an RMS map as 'noise_map'.")
@@ -94,7 +94,8 @@ def signal_masking(cube_name, output_folder, method='spectral_spatial',
             raise TypeError("noise_map must be a file name or an array. Found"
                             " type {}".format(type(noise_map)))
 
-        masked_cube, mask = simple_masking(cube, noise_map, **algorithm_kwargs)
+        masked_cube, mask = ppv_dilation_masking(cube, noise_map,
+                                                 **algorithm_kwargs)
     else:
         raise ValueError("method must be 'spectral_spatial' or "
                          "'ppv_dilation'.")
@@ -117,9 +118,9 @@ def signal_masking(cube_name, output_folder, method='spectral_spatial',
         mask_hdu.writeto(save_name, overwrite=True)
 
 
-def make_signal_mask(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
-                     min_snr=2, edge_thresh=1, verbose=False,
-                     noise_map=None):
+def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
+                             min_snr=2, edge_thresh=1, verbose=False,
+                             noise_map=None):
     '''
     Create a robust signal mask by requiring spatial and spectral
     connectivity.
@@ -304,7 +305,7 @@ def make_signal_mask(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     return masked_cube, mask
 
 
-def simple_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
+def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
     5 sigma, and contains some minimum number of pixels.
