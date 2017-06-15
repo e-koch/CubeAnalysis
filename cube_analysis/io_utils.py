@@ -27,7 +27,7 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
         dtype = fits.BITPIX2DTYPE[header['BITPIX']]
     else:
         # Make sure the header has the right BITPIX
-        header['BITPIX'] = fits.DTYPE2BITPIX[dtype]
+        header['BITPIX'] = fits.DTYPE2BITPIX[dtype.name]
 
     # Iterate over the smallest axis
     min_axis = np.array(shape).argmin()
