@@ -250,7 +250,7 @@ class ProgressBar(six.Iterator):
 
     @classmethod
     def map(cls, function, items, multiprocess=False, file=None, step=100,
-            item_len=None, nprocesses=None):
+            item_len=None, nprocesses=None, **pool_kwargs):
         """
         Does a `map` operation while displaying a progress bar with
         percentage complete.
@@ -322,7 +322,7 @@ class ProgressBar(six.Iterator):
                 elif nprocesses > max_proc:
                     nprocesses = max_proc
 
-                p = multiprocessing.Pool(nprocesses)
+                p = multiprocessing.Pool(nprocesses, **pool_kwargs)
                 for i, out in enumerate(p.imap_unordered(function,
                                                          items,
                                                          chunksize=1)):
@@ -368,7 +368,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 @contextlib.contextmanager
-def _map_context(numcores, verbose=False, num_jobs=None):
+def _map_context(numcores, verbose=False, num_jobs=None, **pool_kwargs):
     """
     Mapping context manager to allow parallel mapping or regular mapping
     depending on the number of cores specified.
@@ -384,12 +384,13 @@ def _map_context(numcores, verbose=False, num_jobs=None):
             ProgressBar.map(func, items,
                             nprocesses=numcores,
                             multiprocess=parallel,
-                            item_len=num_jobs)
+                            item_len=num_jobs,
+                            **pool_kwargs)
     else:
         if numcores is not None and numcores > 1:
             try:
                 import multiprocessing
-                p = multiprocessing.Pool(processes=numcores)
+                p = multiprocessing.Pool(processes=numcores, **pool_kwargs)
                 map = p.map
                 parallel = True
             except ImportError:
