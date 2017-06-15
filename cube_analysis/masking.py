@@ -15,6 +15,8 @@ import numpy as np
 from radio_beam import Beam
 from itertools import groupby, chain
 from operator import itemgetter
+from astropy.stats import mad_std
+from scipy.signal import medfilt
 import matplotlib.pyplot as p
 
 from .io_utils import save_to_huge_fits
@@ -78,7 +80,14 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
     cube = SpectralCube.read(cube_name)
 
     if method == "ppv_connectivity":
-        masked_cube, mask = ppv_connectivity_masking(cube, **algorithm_kwargs)
+        if is_huge:
+            # Big cubes need to use the per-spectrum based approach
+            masked_cube, mask = \
+                ppv_connectivity_perspec_masking(cube, **algorithm_kwargs)
+        else:
+            # Small cubes can be done quicker by using cube-operations
+            masked_cube, mask = \
+                ppv_connectivity_masking(cube, **algorithm_kwargs)
     elif method == "ppv_dilation":
         if 'noise_map' not in algorithm_kwargs:
             raise ValueError("Must specify an RMS map as 'noise_map'.")
@@ -305,6 +314,178 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     return masked_cube, mask
 
 
+def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
+                                     peak_snr=5., min_snr=2, edge_thresh=1,
+                                     verbose=False, noise_map=None):
+    '''
+    Uses the same approach as `~ppv_connectivity_masking`, but avoids doing
+    any operations with the full cube. This will take longer, but will use
+    far less memory.
+    '''
+
+    pixscale = proj_plane_pixel_scales(cube.wcs)[0]
+
+    # # Want to smooth the mask edges
+    mask = cube.mask.include().copy()
+
+    # Set smoothing parameters and # consecutive channels.
+    smooth_chans = int(round_up_to_odd(smooth_chans))
+
+    # consecutive channels to be real emission.
+    num_chans = min_chan
+
+    # Look for places where there is the minimum number of channels
+    summed_mask = mask.sum(0)
+    posns = np.where(summed_mask >= num_chans)
+
+    # Blank the spectra for which none are above min_snr
+    bad_pos = np.where(summed_mask < num_chans)
+    mask[:, bad_pos[0], bad_pos[1]] = False
+
+    for i, j in ProgressBar(zip(*posns)):
+
+        spectrum = cube[:, i, j].value
+
+        # Assume for now that the noise level is ~ constant across the
+        # channels. This is fine for HI, but not for, e.g., CO(1-0).
+        smoothed = medfilt(spectrum, smooth_chans)
+
+        mad = sigma_rob(smoothed, thresh=min_snr, iterations=5)
+
+        snr = spectrum / mad
+
+        good_posns = np.where(smoothed > min_snr * mad)[0]
+
+        # Reject if the total is less than connectivity requirement
+        if good_posns.size < num_chans:
+            mask[:, i, j] = False
+            continue
+
+        # Find connected pixels
+        sequences = []
+        for k, g in groupby(enumerate(good_posns), lambda (i, x): i - x):
+            sequences.append(map(itemgetter(1), g))
+
+        # Check length and peak. Require a minimum of 3 pixels above the noise
+        # to grow from.
+        sequences = [seq for seq in sequences if len(seq) >= 3 and
+                     np.nanmax(snr[:, i, j][seq]) >= peak_snr]
+
+        # Continue if no good sequences found
+        if len(sequences) == 0:
+            mask[:, i, j] = False
+            continue
+
+        # Now take each valid sequence and expand the edges until the smoothed
+        # spectrum approaches zero.
+        edges = [[seq[0], seq[-1]] for seq in sequences]
+        for n, edge in enumerate(edges):
+            # Lower side
+            if n == 0:
+                start_posn = edge[0]
+                stop_posn = 0
+            else:
+                start_posn = edge[0] - edges[n - 1][0]
+                stop_posn = edges[n - 1][0]
+
+            for pt in np.arange(start_posn, stop_posn, -1):
+                # if smoothed[pt] <= mad * edge_thresh:
+                if snr[:, i, j][pt] <= edge_thresh:
+                    break
+
+                sequences[n].insert(0, pt)
+
+            # Upper side
+            start_posn = edge[1]
+            if n == len(edges) - 1:
+                stop_posn = cube.shape[0]
+            else:
+                stop_posn = edges[n + 1][0]
+
+            for pt in np.arange(start_posn, stop_posn, 1):
+                # if smoothed[pt] <= mad * edge_thresh:
+                if snr[:, i, j][pt] <= edge_thresh:
+                    break
+
+                sequences[n].insert(0, pt)
+
+        # Final check for the min peak level and ensure all meet the
+        # spectral connectivity requirement
+        sequences = [seq for seq in sequences if len(seq) >= num_chans and
+                     np.nanmax(snr[:, i, j][seq]) >= peak_snr]
+
+        if len(sequences) == 0:
+            mask[:, i, j] = False
+            continue
+
+        bad_posns = \
+            list(set(np.arange(cube.shape[0])) - set(list(chain(*sequences))))
+
+        mask[:, i, j][bad_posns] = False
+
+        if verbose:
+            p.subplot(121)
+            p.plot(cube.spectral_axis.value, snr[:, i, j])
+            min_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][-1]]
+            max_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][0]]
+            p.vlines(min_val, 0,
+                     np.nanmax(snr[:, i, j]))
+            p.vlines(max_val, 0,
+                     np.nanmax(snr[:, i, j]))
+            p.plot(cube.spectral_axis.value,
+                   snr[:, i, j] * mask[:, i, j], 'bD')
+
+            p.subplot(122)
+            p.plot(cube.spectral_axis.value, spectrum, label='Cube')
+            p.plot(cube.spectral_axis.value, smoothed,
+                   label='Smooth Cube')
+            p.axvline(min_val)
+            p.axvline(max_val)
+            p.plot(cube.spectral_axis.value,
+                   smoothed * mask[:, i, j], 'bD')
+            p.draw()
+            raw_input("Next spectrum?")
+            p.clf()
+
+    # initial_mask = mask.copy()
+
+    # Now set the spatial connectivity requirements.
+
+    if hasattr(cube, 'beams'):
+        kernel = largest_beam(cube.beams).as_tophat_kernel(pixscale)
+    elif hasattr(cube, 'beam'):
+        kernel = cube.beam.as_tophat_kernel(pixscale)
+    else:
+        raise AttributeError("cube doesn't have 'beam' or 'beams'?")
+    kernel_pix = (kernel.array > 0).sum()
+
+    # Avoid edge effects in closing by padding by 1 in each axis
+    mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
+                  constant_values=False)
+
+    for i in ProgressBar(mask.shape[0]):
+        mask[i] = nd.binary_opening(mask[i], kernel)
+        mask[i] = nd.binary_closing(mask[i], kernel)
+        mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
+                                          connectivity=2)
+        mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
+                                        connectivity=2)
+
+    # Remove padding
+    mask = mask[:, 1:-1, 1:-1]
+
+    # Each region must contain a point above the peak_snr
+    labels, num = nd.label(mask, np.ones((3, 3, 3)))
+    for n in range(1, num + 1):
+        pts = np.where(labels == n)
+        if np.nanmax(snr[pts]) < peak_snr:
+            mask[pts] = False
+
+    masked_cube = cube.with_mask(mask)
+
+    return masked_cube, mask
+
+
 def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
@@ -332,3 +513,14 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
 
 def round_up_to_odd(f):
     return np.ceil(f) // 2 * 2 + 1
+
+
+def sigma_rob(data, iterations=1, thresh=3.0, axis=None):
+    """
+    Iterative m.a.d. based sigma with positive outlier rejection.
+    """
+    noise = mad_std(data, axis=axis)
+    for _ in range(iterations):
+        ind = (np.abs(data) <= thresh * noise).nonzero()
+        noise = mad_std(data[ind], axis=axis)
+    return noise
