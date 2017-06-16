@@ -9,6 +9,8 @@ from astropy.utils.console import ProgressBar
 from itertools import izip, repeat
 
 from .io_utils import create_huge_fits
+from .progressbar import _map_context
+from .feather_cubes import get_channel_chunks
 
 
 def fourier_shift(x, shift, axis=0):
@@ -110,7 +112,8 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
     if xy_posns is None:
         # Only compute where a shift can be found
-        xy_posns = np.where(np.isfinite(velocity_surface))
+        xy_posns = np.where(np.logical_and(np.isfinite(velocity_surface),
+                                           cube.mask.include().sum(0) > 0))
 
     if v0 is None:
         # Set to near the center velocity of the cube if not given.
@@ -154,8 +157,8 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         y_posns = xy_posns[0][i * chunk_size:(i + 1) * chunk_size]
         x_posns = xy_posns[1][i * chunk_size:(i + 1) * chunk_size]
 
-        gen = ((y, x, cube[:, y, x], velocity_surface[y, x], v0) for y, x in
-               izip(y_posns, x_posns))
+        gen = [(y, x, cube[:, y, x], velocity_surface[y, x], v0) for y, x in
+               izip(y_posns, x_posns)]
 
         if pool is not None:
             shifted_spectra = pool.map(mulproc_spectrum_shifter, gen)
@@ -163,6 +166,9 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
             shifted_spectra = map(mulproc_spectrum_shifter, gen)
 
         if save_shifted:
+
+            output_fits = fits.open(save_name, mode='update')
+
             for out in shifted_spectra:
                 if is_mask:
                     spec = (out[0].value > 0.5).astype(np.int)
@@ -171,6 +177,7 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
                 output_fits[0].data[:, out[1], out[2]] = spec
 
             output_fits.flush()
+            output_fits.close()
 
         if return_spectra:
             all_shifted_spectra.extend([out[0] for out in shifted_spectra])
