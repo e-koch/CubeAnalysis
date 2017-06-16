@@ -160,7 +160,8 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
         changen = ((chan, cube_hi[chan], cube_lo[chan],
                     LAS, lowresfwhm, frequency) for chan in chunk_chans)
 
-        with _map_context(num_cores, verbose=verbose)as map:
+        with _map_context(num_cores, verbose=verbose,
+                          num_jobs=len(chunk_chans)) as map:
             output = map(_compare, changen)
 
         chan_out = np.array([out[0] for out in output])
