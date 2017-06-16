@@ -53,7 +53,8 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
         changen = ((chan, cube_hi[chan:chan + 1], cube_lo[chan:chan + 1],
                     frequency, feather_kwargs) for chan in chunk_chans)
 
-        with _map_context(num_cores, verbose=verbose) as map:
+        with _map_context(num_cores, verbose=verbose,
+                          num_jobs=len(chunk_chans)) as map:
             log.info("Feathering")
             output = map(_feather, changen)
 
