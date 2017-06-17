@@ -324,14 +324,14 @@ class ProgressBar(six.Iterator):
                 if chunksize is None:
                     chunksize = choose_chunksize(nprocesses, item_len)
 
-                p = multiprocessing.Pool(nprocesses, **pool_kwargs)
-                for i, out in enumerate(p.imap_unordered(function,
-                                                         items,
-                                                         chunksize=chunksize)):
+                pool = multiprocessing.Pool(nprocesses, **pool_kwargs)
+                for i, out in enumerate(pool.imap_unordered(function,
+                                                            items,
+                                                            chunksize=chunksize)):
                     bar.update(i)
                     results.append(out)
-                p.close()
-                p.join()
+                pool.close()
+                pool.join()
 
         return results
 
@@ -394,8 +394,11 @@ def _map_context(numcores, verbose=False, num_jobs=None, chunksize=None,
         if numcores is not None and numcores > 1:
             try:
                 import multiprocessing
-                p = multiprocessing.Pool(processes=numcores, **pool_kwargs)
-                map = partial(p.imap_unordered, chunksize=chunksize)
+                pool = multiprocessing.Pool(processes=numcores, **pool_kwargs)
+                if chunksize is None:
+                    chunksize = 1
+
+                map = partial(pool.map, chunksize=chunksize)
                 parallel = True
             except ImportError:
                 map = builtins.map
@@ -411,7 +414,8 @@ def _map_context(numcores, verbose=False, num_jobs=None, chunksize=None,
     finally:
         # ProgressBar.map already closes the pool
         if not verbose and parallel:
-                p.close()
+                pool.close()
+                pool.join()
 
 
 def choose_chunksize(nprocesses, njobs):
