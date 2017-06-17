@@ -56,7 +56,7 @@ def _shifter(x, shift, axis):
     return x2
 
 
-def spectrum_shifter(spectrum, v0, vcent):
+def spectrum_shifter(spectrum, v0, vcent, return_spectrum=True):
     '''
     Shift the central velocity of a spectrum by the difference if v0 and vcent.
 
@@ -82,15 +82,18 @@ def spectrum_shifter(spectrum, v0, vcent):
     else:
         beams = None
 
-    return OneDSpectrum(shifted, unit=spectrum.unit, wcs=spectrum.wcs,
-                        meta=spectrum.meta, spectral_unit=vel_unit,
-                        beams=beams)
+    if return_spectrum:
+        return OneDSpectrum(shifted, unit=spectrum.unit, wcs=spectrum.wcs,
+                            meta=spectrum.meta, spectral_unit=vel_unit,
+                            beams=beams)
+    else:
+        return shifted
 
 
 def mulproc_spectrum_shifter(inputs):
     y, x, spec, vcent, v0 = inputs
 
-    return spectrum_shifter(spec, v0, vcent), y, x
+    return spectrum_shifter(spec, v0, vcent, return_spectrum=False), y, x
 
 
 def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
@@ -111,8 +114,7 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
     if xy_posns is None:
         # Only compute where a shift can be found
-        xy_posns = np.where(np.logical_and(np.isfinite(velocity_surface),
-                                           cube.mask.include().sum(0) > 0))
+        xy_posns = np.where(np.isfinite(velocity_surface))
 
     if v0 is None:
         # Set to near the center velocity of the cube if not given.
@@ -143,12 +145,13 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         all_shifted_spectra = []
         out_posns = []
 
+    n_chunks = len(xy_posns[0]) / chunk_size
+
     # Create chunks of spectra for read-out.
-    chunks = get_channel_chunks(len(xy_posns[0]), chunk_size)
+    for i, chunk in enumerate(get_channel_chunks(len(xy_posns[0]),
+                                                 chunk_size)):
 
-    for i, chunk in enumerate(chunks):
-
-        log.info("On chunk {0} of {1}".format(i + 1, len(chunks)))
+        log.info("On chunk {0} of {1}".format(i + 1, n_chunks))
 
         y_posns = xy_posns[0][chunk]
         x_posns = xy_posns[1][chunk]
@@ -173,9 +176,9 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
             for out in iterat:
                 if is_mask:
-                    spec = (out[0].value > 0.5).astype(np.int)
+                    spec = (out[0] > 0.5).astype(np.int)
                 else:
-                    spec = out[0].value
+                    spec = out[0]
                 output_fits[0].data[:, out[1], out[2]] = spec
 
             output_fits.flush()
