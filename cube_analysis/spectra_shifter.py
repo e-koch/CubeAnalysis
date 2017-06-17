@@ -56,7 +56,7 @@ def _shifter(x, shift, axis):
     return x2
 
 
-def spectrum_shifter(spectrum, v0, vcent, return_spectrum=True):
+def spectrum_shifter(spectrum, v0, vcent):
     '''
     Shift the central velocity of a spectrum by the difference if v0 and vcent.
 
@@ -82,18 +82,15 @@ def spectrum_shifter(spectrum, v0, vcent, return_spectrum=True):
     else:
         beams = None
 
-    if return_spectrum:
-        return OneDSpectrum(shifted, unit=spectrum.unit, wcs=spectrum.wcs,
-                            meta=spectrum.meta, spectral_unit=vel_unit,
-                            beams=beams)
-    else:
-        return shifted
+    return OneDSpectrum(shifted, unit=spectrum.unit, wcs=spectrum.wcs,
+                        meta=spectrum.meta, spectral_unit=vel_unit,
+                        beams=beams)
 
 
-def mulproc_spectrum_shifter(inputs):
-    y, x, spec, vcent, v0 = inputs
+def _spectrum_shifter(inputs):
+    y, x, spec, shift = inputs
 
-    return spectrum_shifter(spec, v0, vcent, return_spectrum=False), y, x
+    return fourier_shift(spec, shift), y, x
 
 
 def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
@@ -145,6 +142,13 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         all_shifted_spectra = []
         out_posns = []
 
+    # Calculate the pixel shifts that will be applied.
+    vdiff = np.abs(np.diff(cube.spectral_axis[:2])[0])
+    vel_unit = vdiff.unit
+
+    pix_shifts = ((velocity_surface.to(vel_unit) -
+                   v0.to(vel_unit)) / vdiff).value[xy_posns]
+
     n_chunks = len(xy_posns[0]) / chunk_size
 
     # Create chunks of spectra for read-out.
@@ -153,16 +157,13 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
         log.info("On chunk {0} of {1}".format(i + 1, n_chunks))
 
-        y_posns = xy_posns[0][chunk]
-        x_posns = xy_posns[1][chunk]
-
-        gen = [(y, x, cube[:, y, x], velocity_surface[y, x], v0) for y, x in
-               izip(y_posns, x_posns)]
+        gen = [(y, x, cube.unmasked_data[:, y, x], shift) for y, x, shift in
+               izip(xy_posns[0][chunk], xy_posns[1][chunk], pix_shifts[chunk])]
 
         with _map_context(num_cores, verbose=verbose,
                           num_jobs=len(chunk)) as map:
 
-            shifted_spectra = map(mulproc_spectrum_shifter, gen)
+            shifted_spectra = map(_spectrum_shifter, gen)
 
         if save_shifted:
 
@@ -195,9 +196,9 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
         # Append the beam table onto the output file.
         if isinstance(cube, VaryingResolutionSpectralCube):
-            from spectral_cube.cube_utils import beams_to_bintable
-            output_fits = fits.open(save_name, mode='append')
-            output_fits.append(beams_to_bintable(cube.beams))
+            from spectral_cube.cube_utils import largest_beam
+            output_fits = fits.open(save_name, mode='update')
+            output_fits[0].header.update(largest_beam(cube.beams).to_header_keywords())
             output_fits.flush()
             output_fits.close()
 
