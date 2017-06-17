@@ -3,6 +3,7 @@ import six
 import time
 import signal
 import multiprocessing
+from functools import partial
 from astropy.utils.console import (_get_stdout, isatty, isiterable,
                                    human_file_size, _CAN_RESIZE_TERMINAL,
                                    terminal_size, color_print, human_time)
@@ -249,7 +250,7 @@ class ProgressBar(six.Iterator):
         pass
 
     @classmethod
-    def map(cls, function, items, multiprocess=False, file=None, step=100,
+    def map(cls, function, items, multiprocess=False, file=None, chunksize=100,
             item_len=None, nprocesses=None, **pool_kwargs):
         """
         Does a `map` operation while displaying a progress bar with
@@ -308,8 +309,6 @@ class ProgressBar(six.Iterator):
                 item_len = len(items)
 
         with cls(item_len, file=file) as bar:
-            default_step = max(int(float(item_len) / bar._bar_length), 1)
-            chunksize = min(default_step, step)
             if not multiprocess:
                 for i, item in enumerate(items):
                     results.append(function(item))
@@ -322,10 +321,13 @@ class ProgressBar(six.Iterator):
                 elif nprocesses > max_proc:
                     nprocesses = max_proc
 
+                if chunksize is None:
+                    chunksize = choose_chunksize(nprocesses, item_len)
+
                 p = multiprocessing.Pool(nprocesses, **pool_kwargs)
                 for i, out in enumerate(p.imap_unordered(function,
                                                          items,
-                                                         chunksize=1)):
+                                                         chunksize=chunksize)):
                     bar.update(i)
                     results.append(out)
                 p.close()
@@ -368,7 +370,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 @contextlib.contextmanager
-def _map_context(numcores, verbose=False, num_jobs=None, **pool_kwargs):
+def _map_context(numcores, verbose=False, num_jobs=None, chunksize=None,
+                 **pool_kwargs):
     """
     Mapping context manager to allow parallel mapping or regular mapping
     depending on the number of cores specified.
@@ -385,13 +388,14 @@ def _map_context(numcores, verbose=False, num_jobs=None, **pool_kwargs):
                             nprocesses=numcores,
                             multiprocess=parallel,
                             item_len=num_jobs,
+                            chunksize=chunksize,
                             **pool_kwargs)
     else:
         if numcores is not None and numcores > 1:
             try:
                 import multiprocessing
                 p = multiprocessing.Pool(processes=numcores, **pool_kwargs)
-                map = p.map
+                map = partial(p.imap_unordered, chunksize=chunksize)
                 parallel = True
             except ImportError:
                 map = builtins.map
@@ -408,3 +412,19 @@ def _map_context(numcores, verbose=False, num_jobs=None, **pool_kwargs):
         # ProgressBar.map already closes the pool
         if not verbose and parallel:
                 p.close()
+
+
+def choose_chunksize(nprocesses, njobs):
+    '''
+    Split the chunks into roughly equal portions.
+    '''
+    # Auto split into close to equal chunks
+    if njobs % nprocesses == 0:
+        chunksize = njobs / nprocesses
+    else:
+        # Split into smaller chunks that are still
+        # roughly equal, but won't have any small
+        # leftovers that would slow things down
+        chunksize = njobs / (nprocesses + 1)
+
+    return chunksize

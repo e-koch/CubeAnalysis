@@ -1,15 +1,14 @@
 
 from astropy.io import fits
-from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
+from spectral_cube import VaryingResolutionSpectralCube
 from spectral_cube.lower_dimensional_structures import OneDSpectrum
 import astropy.units as u
+from astropy import log
 import numpy as np
-import os
-from astropy.utils.console import ProgressBar
-from itertools import izip, repeat
+from itertools import izip
 
 from .io_utils import create_huge_fits
-from .progressbar import _map_context
+from .progressbar import _map_context, ProgressBar
 from .feather_cubes import get_channel_chunks
 
 
@@ -95,7 +94,7 @@ def mulproc_spectrum_shifter(inputs):
 
 
 def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
-                 save_name=None, xy_posns=None, pool=None,
+                 save_name=None, xy_posns=None, num_cores=1,
                  return_spectra=True, chunk_size=20000, is_mask=False,
                  verbose=False):
     '''
@@ -137,39 +136,42 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         else:
             dtype = cube[:, 0, 0].dtype
 
-        output_fits = create_huge_fits(save_name, new_header, dtype=dtype,
-                                       return_hdu=True, fill_nan=not is_mask)
+        create_huge_fits(save_name, new_header, dtype=dtype,
+                         return_hdu=False, fill_nan=not is_mask)
 
     if return_spectra:
         all_shifted_spectra = []
         out_posns = []
 
     # Create chunks of spectra for read-out.
-    nchunks = 1 + xy_posns[0].size // chunk_size
+    chunks = get_channel_chunks(len(xy_posns[0]), chunk_size)
 
-    if verbose:
-        iterat = ProgressBar(xrange(nchunks))
-    else:
-        iterat = xrange(nchunks)
+    for i, chunk in enumerate(chunks):
 
-    for i in iterat:
+        log.info("On chunk {0} of {1}".format(i + 1, len(chunks)))
 
-        y_posns = xy_posns[0][i * chunk_size:(i + 1) * chunk_size]
-        x_posns = xy_posns[1][i * chunk_size:(i + 1) * chunk_size]
+        y_posns = xy_posns[0][chunk]
+        x_posns = xy_posns[1][chunk]
 
         gen = [(y, x, cube[:, y, x], velocity_surface[y, x], v0) for y, x in
                izip(y_posns, x_posns)]
 
-        if pool is not None:
-            shifted_spectra = pool.map(mulproc_spectrum_shifter, gen)
-        else:
+        with _map_context(num_cores, verbose=verbose,
+                          num_jobs=len(chunk)) as map:
+
             shifted_spectra = map(mulproc_spectrum_shifter, gen)
 
         if save_shifted:
 
             output_fits = fits.open(save_name, mode='update')
+            log.info("Writing chunk to file")
 
-            for out in shifted_spectra:
+            if verbose:
+                iterat = ProgressBar(shifted_spectra)
+            else:
+                iterat = shifted_spectra
+
+            for out in iterat:
                 if is_mask:
                     spec = (out[0].value > 0.5).astype(np.int)
                 else:
@@ -185,8 +187,8 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
     if save_shifted:
 
-        output_fits.flush()
-        output_fits.close()
+        # output_fits.flush()
+        # output_fits.close()
 
         # Append the beam table onto the output file.
         if isinstance(cube, VaryingResolutionSpectralCube):
