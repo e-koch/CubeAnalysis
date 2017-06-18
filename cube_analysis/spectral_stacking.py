@@ -1,12 +1,12 @@
 
 import numpy as np
 import astropy.units as u
-from astropy.utils.console import ProgressBar
 from astropy.coordinates import Angle
 from itertools import izip
-from scipy.stats import percentileofscore
+from astropy import log
 
 from .progressbar import _map_context
+from .feather_cubes import get_channel_chunks
 
 
 def total_profile(cube, spatial_mask=None, chunk_size=10000,
@@ -21,24 +21,15 @@ def total_profile(cube, spatial_mask=None, chunk_size=10000,
         posns = np.where(spatial_mask)
 
     num_specs = posns[0].size
-    channels = np.arange(num_specs)
-    chunksidx = \
-        np.array_split(channels,
-                       [chunk_size * i for i in
-                        xrange(num_specs / chunk_size)])
-    if chunksidx[-1].size == 0:
-        chunksidx = chunksidx[:-1]
-
-    posns_y = np.array_split(posns[0], chunksidx)
-    posns_x = np.array_split(posns[1], chunksidx)
+    chunksidx = get_channel_chunks(num_specs, chunk_size)
 
     cubelist = ([(cube.filled_data[:, jj, ii],
                  cube.mask.include(view=(slice(None), jj, ii)))
-                for jj, ii in izip(y_pos, x_pos)]
-                for y_pos, x_pos in izip(posns_y, posns_x))
+                for jj, ii in izip(posns[0][chunk], posns[1][chunk])]
+                for chunk in chunksidx)
 
     with _map_context(num_cores, verbose=verbose,
-                      num_jobs=len(posns_y)) as map:
+                      num_jobs=len(chunksidx)) as map:
 
         stacked_spectra = \
             np.array([x for x in map(_masked_sum, cubelist)])
@@ -67,7 +58,7 @@ def _masked_sum(gen):
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
-                    pa_bounds=None, num_cores=1):
+                    pa_bounds=None, num_cores=1, verbose=False):
     '''
     Radially stack spectra.
     '''
@@ -107,14 +98,16 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
     for ctr, (r0, r1) in enumerate(zip(inneredge,
                                        outeredge)):
 
-        print("On bin {} to {}".format(r0.value, r1))
+        if verbose:
+            log.info("On bin {} to {}".format(r0.value, r1))
 
         rad_mask = np.logical_and(radius >= r0, radius < r1)
 
         spec_mask = np.logical_and(rad_mask, pa_mask)
 
         stacked_spectra[ctr] = \
-            total_profile(cube, spec_mask, num_cores=num_cores)
+            total_profile(cube, spec_mask, num_cores=num_cores,
+                          verbose=verbose)
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
@@ -122,7 +115,7 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
 
 
 def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
-                        max_val=None):
+                        max_val=None, verbose=False):
     '''
     Stack spectra in a cube based on the values in a given 2D image. For
     example, give the peak temperature array to stack based on percentile of
@@ -161,11 +154,13 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
     for ctr, (p0, p1) in enumerate(zip(inneredge,
                                        outeredge)):
 
-        print("On bin {} to {} K".format(p0, p1))
+        if verbose:
+            log.info("On bin {} to {} K".format(p0, p1))
 
         mask = np.logical_and(proj >= p0, proj < p1)
 
-        stacked_spectra[ctr] = total_profile(cube, mask, num_cores=num_cores)
+        stacked_spectra[ctr] = total_profile(cube, mask, num_cores=num_cores,
+                                             verbose=verbose)
 
     bin_centers = inneredge + dperc / 2.
 
