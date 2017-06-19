@@ -490,8 +490,11 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
     5 sigma, and contains some minimum number of pixels.
     '''
 
-    mask_low = (cube > min_sig * noise_map * cube.unit).include()
-    mask_high = (cube > max_sig * noise_map * cube.unit).include()
+    if not hasattr(noise_map, "unit"):
+        noise_map = noise_map.copy() * cube.unit
+
+    mask_low = (cube > min_sig * noise_map).include()
+    mask_high = (cube > max_sig * noise_map).include()
 
     mask_low = mo.remove_small_objects(mask_low, min_size=min_pix,
                                        connectivity=2)
