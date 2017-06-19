@@ -126,8 +126,8 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
 
 
 def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
-                             min_snr=2, edge_thresh=1, verbose=False,
-                             noise_map=None):
+                             min_snr=2, edge_thresh=1, show_plots=False,
+                             noise_map=None, verbose=False):
     '''
     Create a robust signal mask by requiring spatial and spectral
     connectivity.
@@ -180,7 +180,11 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     bad_pos = np.where(snr.max(axis=0) < min_snr)
     mask[:, bad_pos[0], bad_pos[1]] = False
 
-    for i, j in ProgressBar(zip(*posns)):
+    iter = zip(*posns)
+    if verbose:
+        iter = ProgressBar(iter)
+
+    for i, j in iter:
 
         # Look for all pixels above min_snr
         good_posns = np.where(snr[:, i, j] > min_snr)[0]
@@ -252,7 +256,7 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 
         mask[:, i, j][bad_posns] = False
 
-        if verbose:
+        if show_plots:
             p.subplot(121)
             p.plot(cube.spectral_axis.value, snr[:, i, j])
             min_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][-1]]
@@ -289,7 +293,12 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
                   constant_values=False)
 
-    for i in ProgressBar(mask.shape[0]):
+    if verbose:
+        iter = ProgressBar(mask.shape[0])
+    else:
+        iter = xrange(mask.shape[0])
+
+    for i in iter:
         mask[i] = nd.binary_opening(mask[i], kernel)
         mask[i] = nd.binary_closing(mask[i], kernel)
         mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
@@ -314,7 +323,8 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 
 def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
                                      peak_snr=5., min_snr=2, edge_thresh=1,
-                                     verbose=False, noise_map=None):
+                                     show_plots=False, noise_map=None,
+                                     verbose=False):
     '''
     Uses the same approach as `~ppv_connectivity_masking`, but avoids doing
     any operations with the full cube. This will take longer, but will use
@@ -340,7 +350,11 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     bad_pos = np.where(summed_mask < num_chans)
     mask[:, bad_pos[0], bad_pos[1]] = False
 
-    for i, j in ProgressBar(zip(*posns)):
+    iter = zip(*posns)
+    if verbose:
+        iter = ProgressBar(iter)
+
+    for i, j in iter:
 
         spectrum = cube[:, i, j].value
 
@@ -421,7 +435,7 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
 
         mask[:, i, j][bad_posns] = False
 
-        if verbose:
+        if show_plots:
             p.subplot(121)
             p.plot(cube.spectral_axis.value, snr[:, i, j])
             min_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][-1]]
@@ -461,7 +475,12 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
                   constant_values=False)
 
-    for i in ProgressBar(mask.shape[0]):
+    if verbose:
+        iter = ProgressBar(mask.shape[0])
+    else:
+        iter = xrange(mask.shape[0])
+
+    for i in iter:
         mask[i] = nd.binary_opening(mask[i], kernel)
         mask[i] = nd.binary_closing(mask[i], kernel)
         mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
@@ -484,7 +503,8 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     return masked_cube, mask
 
 
-def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
+def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
+                         verbose=False):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
     5 sigma, and contains some minimum number of pixels.
@@ -503,7 +523,11 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27):
     kernel = np.ones((3, 3, 3))
     labels, num = nd.label(mask_low, kernel)
 
-    for i in xrange(1, num + 1):
+    iter = xrange(1, num + 1)
+    if verbose:
+        iter = ProgressBar(iter)
+
+    for i in iter:
         pix = np.where(labels == i)
         if np.any(mask_high[pix]):
             continue
