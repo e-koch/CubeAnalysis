@@ -2,6 +2,7 @@
 from spectral_cube import SpectralCube
 from astropy.utils.console import ProgressBar
 from astropy import log
+from astropy.io import fits
 import os
 from itertools import repeat
 import numpy as np
@@ -74,6 +75,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         if key in new_header:
             del new_header[key]
 
+    # If there is one beam for all channels, attach to the header
+    if common_beam and isinstance(beams, repeat):
+            new_header.update(beams.next().to_header_keywords())
+
     # Build up the reprojected cube per channel
     save_name = os.path.join(output_folder, output_cubename)
 
@@ -93,3 +98,11 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         if chan % chunk == 0:
             output_fits.flush()
     output_fits.close()
+
+    # If there was a table of beams, be sure to append this.
+    if common_beam and isinstance(beams, list):
+            from spectral_cube.cube_utils import beams_to_bintable
+            output_fits = fits.open(save_name, mode='append')
+            output_fits.append(beams_to_bintable(beams))
+            output_fits.flush()
+            output_fits.close()
