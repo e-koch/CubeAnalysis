@@ -90,9 +90,12 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     targ_dtype = targ_cube[:1, 0, 0].dtype
     log.info("Reprojecting and writing.")
     for chan, beam in zip(ProgressBar(cube.shape[0]), beams):
-        proj = cube[chan].reproject(targ_header).value.astype(targ_dtype)
+        proj = cube[chan]
+
         if common_beam:
             proj = proj.convolve_to(beam)
+
+        proj = proj.reproject(targ_header).value.astype(targ_dtype)
 
         output_fits[0].data[chan] = proj
         if chan % chunk == 0:
