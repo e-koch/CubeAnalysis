@@ -17,6 +17,7 @@ def total_profile(cube, spatial_mask=None, chunk_size=10000,
 
     if spatial_mask is None:
         posns = np.indices(cube[0].shape)
+        posns = (posns[0].ravel(), posns[1].ravel())
     else:
         posns = np.where(spatial_mask)
 
