@@ -13,7 +13,7 @@ from .io_utils import create_huge_fits, save_to_huge_fits
 def reproject_cube(cubename, targ_cubename, output_cubename,
                    output_folder="",
                    common_beam=False, save_spectral=True,
-                   is_huge=True, chunk=100):
+                   is_huge=True, chunk=100, verbose=True):
     '''
     Reproject one cube to match another.
     '''
@@ -41,7 +41,8 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         beams = repeat(None)
 
     # Spectrally interpolate
-    log.info("Spectral interpolation")
+    if verbose:
+        log.info("Spectral interpolation")
     cube = cube.spectral_interpolate(targ_cube.spectral_axis)
 
     # Make sure the spectral axes are the same (and not reversed).
@@ -51,12 +52,13 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # Write out the spectrally interpolated cube
     if save_spectral:
-        log.info("Saving the spectrally interpolated cube.")
+        if verbose:
+            log.info("Saving the spectrally interpolated cube.")
         spec_savename = \
             "{}_spectralregrid.fits".format(os.path.splitext(output_cubename)[0])
         spec_savename = os.path.join(output_folder, spec_savename)
         if is_huge:
-            save_to_huge_fits(spec_savename, cube, verbose=True,
+            save_to_huge_fits(spec_savename, cube, verbose=verbose,
                               overwrite=False)
         else:
             cube.write(spec_savename)
@@ -82,14 +84,20 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     # Build up the reprojected cube per channel
     save_name = os.path.join(output_folder, output_cubename)
 
-    log.info("Creating new FITS file.")
+    if verbose:
+        log.info("Creating new FITS file.")
     output_fits = create_huge_fits(save_name, new_header, dtype=None,
                                    return_hdu=True)
 
     targ_header = targ_cube[0].header
     targ_dtype = targ_cube[:1, 0, 0].dtype
-    log.info("Reprojecting and writing.")
-    for chan, beam in zip(ProgressBar(cube.shape[0]), beams):
+    if verbose:
+        log.info("Reprojecting and writing.")
+        chan_iter = ProgressBar(cube.shape[0])
+    else:
+        chan_iter = xrange(cube.shape[0])
+
+    for chan, beam in zip(chan_iter, beams):
         proj = cube[chan]
 
         if common_beam:
@@ -104,6 +112,8 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # If there was a table of beams, be sure to append this.
     if common_beam and isinstance(beams, list):
+            if verbose:
+                log.info("Appending beam table to FITS file.")
             from spectral_cube.cube_utils import beams_to_bintable
             output_fits = fits.open(save_name, mode='append')
             output_fits.append(beams_to_bintable(beams))
