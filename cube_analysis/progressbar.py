@@ -431,4 +431,4 @@ def choose_chunksize(nprocesses, njobs):
         # leftovers that would slow things down
         chunksize = njobs / (nprocesses + 1)
 
-    return chunksize
+    return chunksize if chunksize > 0 else 1
