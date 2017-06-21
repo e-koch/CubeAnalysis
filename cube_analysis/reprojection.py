@@ -61,23 +61,18 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
             cube.write(spec_savename)
 
     # Make the reprojected header
-    new_header = cube.header.copy()
+    new_header = cube._nowcs_header.copy()
+
+    new_header.update(targ_cube.wcs.to_header())
+
     new_header["NAXIS"] = 3
     new_header["NAXIS1"] = targ_cube.shape[2]
     new_header["NAXIS2"] = targ_cube.shape[1]
     new_header["NAXIS3"] = targ_cube.shape[0]
-    kwarg_skip = ['TELESCOP', 'BUNIT', 'INSTRUME']
-    for key in cube.header:
-        if key == 'HISTORY' or key == 'COMMENT':
-            continue
-        if key in targ_cube.header:
-            if "NAXIS" in key:
-                continue
-            if key in kwarg_skip:
-                continue
-            new_header[key] = targ_cube.header[key]
-    new_header.update(cube.beam.to_header_keywords())
-    new_header["BITPIX"] = targ_cube.header["BITPIX"]
+    kwarg_skip = ["OBSGEO-X", "OBSGEO-Y", "OBSGEO-Z", "RESTFRQ"]
+    for key in kwarg_skip:
+        if key in new_header:
+            del new_header[key]
 
     # Build up the reprojected cube per channel
     save_name = os.path.join(output_folder, output_cubename)
