@@ -82,6 +82,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         new_header.update(targ_cube.wcs.to_header())
     else:
         new_header.update(targ_cube.wcs.celestial.to_header())
+        new_header.update(cube[:, 0, 0].wcs.to_header())
 
     new_header["NAXIS"] = 3
     new_header["NAXIS1"] = targ_cube.shape[2]
@@ -109,13 +110,13 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     targ_header = targ_cube[0].header
     targ_dtype = targ_cube[:1, 0, 0].dtype
+
+    chan_iter = zip(range(cube.shape[0]), beams)
     if verbose:
         log.info("Reprojecting and writing.")
-        chan_iter = ProgressBar(cube.shape[0])
-    else:
-        chan_iter = xrange(cube.shape[0])
+        chan_iter = ProgressBar(chan_iter)
 
-    for chan, beam in zip(chan_iter, beams):
+    for chan, beam in chan_iter:
         proj = cube[chan]
 
         if common_beam:
