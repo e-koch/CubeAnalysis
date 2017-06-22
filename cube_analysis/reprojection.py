@@ -1,5 +1,6 @@
 
 from spectral_cube import SpectralCube
+from spectral_cube.cube_utils import largest_beam
 from astropy.utils.console import ProgressBar
 from astropy import log
 from astropy.io import fits
@@ -11,12 +12,18 @@ from .io_utils import create_huge_fits, save_to_huge_fits
 
 
 def reproject_cube(cubename, targ_cubename, output_cubename,
-                   output_folder="",
+                   output_folder="", reproject_type='all',
                    common_beam=False, save_spectral=True,
                    is_huge=True, chunk=100, verbose=True):
     '''
     Reproject one cube to match another.
     '''
+
+    allowed_types = ['all', 'spatial']
+
+    if reproject_type not in allowed_types:
+        raise TypeError("reproject_type must be 'all' or 'spatial'.")
+
     # Load the non-pb masked cube
     targ_cube = SpectralCube.read(targ_cubename)
 
@@ -25,7 +32,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     # Before doing the time-consuming stuff, make sure there are beams
     if common_beam:
         if hasattr(targ_cube, 'beams'):
-            beams = cube.beams
+            if reproject_type == 'all':
+                beams = cube.beams
+            else:
+                beams = repeat(largest_beam(cube.beams))
         elif hasattr(targ_cube, 'beam'):
             beams = repeat(cube.beam)
         else:
@@ -41,37 +51,45 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         beams = repeat(None)
 
     # Spectrally interpolate
-    if verbose:
-        log.info("Spectral interpolation")
-    cube = cube.spectral_interpolate(targ_cube.spectral_axis)
-
-    # Make sure the spectral axes are the same (and not reversed).
-    if not np.allclose(cube.spectral_axis.value,
-                       targ_cube.spectral_axis.value):
-        raise Warning("The spectral axes do not match.")
-
-    # Write out the spectrally interpolated cube
-    if save_spectral:
+    if reproject_type == 'all':
         if verbose:
-            log.info("Saving the spectrally interpolated cube.")
-        spec_savename = \
-            "{}_spectralregrid.fits".format(os.path.splitext(output_cubename)[0])
-        spec_savename = os.path.join(output_folder, spec_savename)
-        if is_huge:
-            save_to_huge_fits(spec_savename, cube, verbose=verbose,
-                              overwrite=False)
-        else:
-            cube.write(spec_savename)
+            log.info("Spectral interpolation")
+
+        cube = cube.spectral_interpolate(targ_cube.spectral_axis)
+
+        # Make sure the spectral axes are the same (and not reversed).
+        if not np.allclose(cube.spectral_axis.value,
+                           targ_cube.spectral_axis.value):
+            raise Warning("The spectral axes do not match.")
+
+        # Write out the spectrally interpolated cube
+        if save_spectral:
+            if verbose:
+                log.info("Saving the spectrally interpolated cube.")
+            spec_savename = \
+                "{}_spectralregrid.fits".format(os.path.splitext(output_cubename)[0])
+            spec_savename = os.path.join(output_folder, spec_savename)
+            if is_huge:
+                save_to_huge_fits(spec_savename, cube, verbose=verbose,
+                                  overwrite=False)
+            else:
+                cube.write(spec_savename)
 
     # Make the reprojected header
     new_header = cube._nowcs_header.copy()
 
-    new_header.update(targ_cube.wcs.to_header())
+    if reproject_type == 'all':
+        new_header.update(targ_cube.wcs.to_header())
+    else:
+        new_header.update(targ_cube.wcs.celestial.to_header())
 
     new_header["NAXIS"] = 3
     new_header["NAXIS1"] = targ_cube.shape[2]
     new_header["NAXIS2"] = targ_cube.shape[1]
-    new_header["NAXIS3"] = targ_cube.shape[0]
+    if reproject_type == 'all':
+        new_header["NAXIS3"] = targ_cube.shape[0]
+    else:
+        new_header['NAXIS3'] = cube.shape[0]
     kwarg_skip = ["OBSGEO-X", "OBSGEO-Y", "OBSGEO-Z", "RESTFRQ"]
     for key in kwarg_skip:
         if key in new_header:
