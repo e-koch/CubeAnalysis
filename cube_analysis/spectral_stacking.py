@@ -9,53 +9,15 @@ from .progressbar import _map_context
 from .feather_cubes import get_channel_chunks
 
 
-def total_profile(cube, spatial_mask=None, chunk_size=10000,
-                  num_cores=1, verbose=False):
+def total_profile(cube, spatial_mask=None, how='slice'):
     '''
     Create the total profile over a region in a given spatial mask.
     '''
 
-    if spatial_mask is None:
-        posns = np.indices(cube[0].shape)
-        posns = (posns[0].ravel(), posns[1].ravel())
+    if spatial_mask is not None:
+        return cube.with_mask(spatial_mask).sum(axis=(1, 2), how=how)
     else:
-        posns = np.where(spatial_mask)
-
-    num_specs = posns[0].size
-    chunksidx = get_channel_chunks(num_specs, chunk_size)
-
-    cubelist = ([(cube.filled_data[:, jj, ii],
-                 cube.mask.include(view=(slice(None), jj, ii)))
-                for jj, ii in izip(posns[0][chunk], posns[1][chunk])]
-                for chunk in chunksidx)
-
-    with _map_context(num_cores, verbose=verbose,
-                      num_jobs=len(chunksidx)) as map:
-
-        stacked_spectra = \
-            np.array([x for x in map(_masked_sum, cubelist)])
-
-    # Sum each chunk together
-    all_stacked = np.nansum(stacked_spectra, axis=0) * cube.unit
-
-    return all_stacked
-
-
-def _masked_sum(gen):
-    '''
-    Sum a list of spectra, applying their respective masks.
-    '''
-
-    for i, vals in enumerate(gen):
-
-        spec, mask = vals
-
-        if i == 0:
-            total_stack = np.zeros_like(spec)
-
-        total_stack[mask] += spec[mask]
-
-    return total_stack
+        return cube.sum(axis=(1, 2), how=how)
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
