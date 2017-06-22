@@ -15,9 +15,14 @@ def total_profile(cube, spatial_mask=None, how='slice'):
     '''
 
     if spatial_mask is not None:
-        return cube.with_mask(spatial_mask).sum(axis=(1, 2), how=how)
+        total_spec = cube.with_mask(spatial_mask).sum(axis=(1, 2), how=how)
     else:
-        return cube.sum(axis=(1, 2), how=how)
+        total_spec = cube.sum(axis=(1, 2), how=how)
+
+    # Set NaNs to 0
+    total_spec[np.isnan(total_spec)] = 0.0
+
+    return total_spec
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
