@@ -81,8 +81,8 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     if reproject_type == 'all':
         new_header.update(targ_cube.wcs.to_header())
     else:
+        new_header.update(cube[:, :1, :1].wcs.to_header())
         new_header.update(targ_cube.wcs.celestial.to_header())
-        new_header.update(cube[:, 0, 0].wcs.to_header())
 
     new_header["NAXIS"] = 3
     new_header["NAXIS1"] = targ_cube.shape[2]
