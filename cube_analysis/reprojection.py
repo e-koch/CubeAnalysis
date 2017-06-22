@@ -33,11 +33,11 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     if common_beam:
         if hasattr(targ_cube, 'beams'):
             if reproject_type == 'all':
-                beams = cube.beams
+                beams = targ_cube.beams
             else:
-                beams = repeat(largest_beam(cube.beams))
+                beams = repeat(largest_beam(targ_cube.beams))
         elif hasattr(targ_cube, 'beam'):
-            beams = repeat(cube.beam)
+            beams = repeat(targ_cube.beam)
         else:
             raise AttributeError("The target cube does not have an associated "
                                  "beam. `common_beam` requires a beam object "
