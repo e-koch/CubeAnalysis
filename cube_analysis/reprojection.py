@@ -4,6 +4,7 @@ from spectral_cube.cube_utils import largest_beam
 from astropy.utils.console import ProgressBar
 from astropy import log
 from astropy.io import fits
+from astropy.wcs import WCS, WcsError
 import os
 from itertools import repeat
 import numpy as np
@@ -81,8 +82,30 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     if reproject_type == 'all':
         new_header.update(targ_cube.wcs.to_header())
     else:
-        new_header.update(cube[:, :1, :1].wcs.to_header())
-        new_header.update(targ_cube.wcs.celestial.to_header())
+        old_header = cube[:, :1, :1].wcs.to_header()
+        old_celest_header = cube.wcs.celestial.to_header()
+        new_header.update(old_header)
+        new_celest_header = targ_cube.wcs.celestial.to_header()
+        new_header.update(new_celest_header)
+
+        # Delete any celestial keywords not in the new header
+        del_keys = list(set(old_celest_header.keys()) -
+                        set(new_celest_header.keys()))
+        for key in del_keys:
+            del new_header[key]
+
+    # Add a check to make sure the WCS info matches
+    if reproject_type == 'all':
+        if not targ_cube.wcs.compare(WCS(new_header).wcs):
+            print(new_header)
+            raise WcsError("New header WCS does not match the target WCS. "
+                           "Check the above header for the issue above.")
+    else:
+        if not targ_cube.wcs.celestial.wcs.compare(WCS(new_header).celestial.wcs):
+            print(new_header)
+            raise WcsError("New header celestial WCS does not match the target"
+                           " celestial WCS. "
+                           "Check the above header for the issue above.")
 
     new_header["NAXIS"] = 3
     new_header["NAXIS1"] = targ_cube.shape[2]
