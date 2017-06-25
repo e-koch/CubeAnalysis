@@ -99,7 +99,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # Add a check to make sure the WCS info matches
     if reproject_type == 'all':
-        if not targ_cube.wcs.compare(WCS(new_header).wcs):
+        if not targ_cube.wcs.wcs.compare(WCS(new_header).wcs):
             print(new_header)
             raise WcsError("New header WCS does not match the target WCS. "
                            "Check the above header for the issue above.")
