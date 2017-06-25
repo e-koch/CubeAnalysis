@@ -44,7 +44,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
                                  "beam. `common_beam` requires a beam object "
                                  "for both cubes.")
 
-        if not hasattr(cube, 'beam'):
+        if not hasattr(cube, 'beam') and not hasattr(cube, 'beams'):
             raise AttributeError("The cube does not have an associated "
                                  "beam. `common_beam` requires a beam object "
                                  "for both cubes.")
