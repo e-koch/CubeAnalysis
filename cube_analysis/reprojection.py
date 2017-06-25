@@ -1,5 +1,5 @@
 
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
 from spectral_cube.cube_utils import largest_beam
 from astropy.utils.console import ProgressBar
 from astropy import log
@@ -55,6 +55,9 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     if reproject_type == 'all':
         if verbose:
             log.info("Spectral interpolation")
+
+        if isinstance(cube, VaryingResolutionSpectralCube):
+            cube = cube.convolve_to(largest_beam(cube.beams))
 
         cube = cube.spectral_interpolate(targ_cube.spectral_axis)
 
