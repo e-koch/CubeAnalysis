@@ -11,9 +11,9 @@ def update_galaxy_params(gal, param_table):
 
     assert isinstance(gal, Galaxy)
 
-    gal.inclination = Angle(param_table["inc"] * u.deg)[0]
-    gal.position_angle = Angle(param_table["PA"] * u.deg)[0]
-    gal.vsys = (param_table["Vsys"] * u.km / u.s)[0]
+    gal.inclination = Angle(param_table["inc"][0] * u.deg)
+    gal.position_angle = Angle(param_table["PA"][0] * u.deg)
+    gal.vsys = param_table["Vsys"][0] * u.km / u.s
 
     gal.center_position = SkyCoord(param_table["RAcent"],
                                    param_table["Deccent"], unit=(u.deg, u.deg),
