@@ -230,9 +230,9 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
         # Generate a smooth model of the rotation curve
         update_galaxy_params(gal, df)
 
-        pars, pcov = generate_vrot_model(df)
+        pars, pcov = generate_vrot_model(tab)
 
-        smooth_model = return_smooth_model(df, header, gal)
+        smooth_model = return_smooth_model(tab, header, gal)
 
         fit_comment = "Smooth rotation model of DISKFIT output. " \
             "Uses Eq.5 from Meidt et al. 2008. n={0:.2f}+/-{1:.2f}, " \
@@ -254,7 +254,7 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
                                         header=header)
         smoothres_hdu.header["BUNIT"] = bunit
         smoothres_hdu.header["COMMENT"] = fit_comment
-        smoothres_hdu.writeto("rad.fitmod.fits", overwrite=True)
+        smoothres_hdu.writeto("rad.fitres.fits", overwrite=True)
 
     # Return the the initial directory
     os.chdir(orig_direc)
