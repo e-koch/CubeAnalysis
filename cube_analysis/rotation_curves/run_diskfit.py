@@ -108,34 +108,66 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
     with open('rad.out') as f:
         contents = f.readlines()
 
+    # Find which of the parameters were left free
+    disk_toggles = contents[14].split()[2:]
+    disk_free_params = {disk_toggles[i][:-1]: True
+                        if disk_toggles[i + 1] == "T"
+                        else False for i in np.arange(0, 10, 2)}
+
+    vel_toggles = contents[15].split()[2:]
+    vel_free_params = {vel_toggles[i][:-1]: True
+                       if vel_toggles[i + 1] == "T"
+                       else False for i in np.arange(0, 10, 2)}
+
+
     # Read out the best fit values for the galaxy parameters and the fit results
     # Params on line 39-42, 44, 56-59
     params = {}
-    params["PA"] = float(contents[39].split()[-3])
-    params["PA_err"] = float(contents[39].split()[-1])
-    params["eps"] = float(contents[40].split()[-3])
-    params["eps_err"] = float(contents[40].split()[-1])
-    params["inc"] = float(contents[41].split()[-3])
-    params["inc_err"] = float(contents[41].split()[-1])
+
+    if disk_free_params['PA']:
+        params["PA"] = float(contents[39].split()[-3])
+        params["PA_err"] = float(contents[39].split()[-1])
+    else:
+        params["PA"] = float(contents[19].split()[-1])
+        params["PA_err"] = np.NaN
+
+    if disk_free_params['eps']:
+        params["eps"] = float(contents[40].split()[-3])
+        params["eps_err"] = float(contents[40].split()[-1])
+        params["inc"] = float(contents[41].split()[-3])
+        params["inc_err"] = float(contents[41].split()[-1])
+    else:
+        params["eps"] = float(contents[20].split()[-1])
+        params["eps_err"] = np.NaN
+        params["inc"] = np.rad2deg(np.arccos(1 - params['eps']))
+        params["inc_err"] = np.NaN
+
     # Both x and y are on the same line
-    try:
+    if disk_free_params['center']:
         params["xcent"] = float(contents[42].split()[-6])
         params["xcent_err"] = float(contents[42].split()[-4][:-1])
         params["ycent"] = float(contents[42].split()[-3])
         params["ycent_err"] = float(contents[42].split()[-1])
+    else:
+        params["xcent"] = float(contents[42].split()[-6])
+        params["xcent_err"] = np.NaN
+        params["ycent"] = float(contents[42].split()[-3])
+        params["ycent_err"] = np.NaN
 
-        # Now convert xcent and ycent to RA and Dec.
-        params["RAcent"], params["Deccent"] = \
-            mywcs.celestial.wcs_pix2world(params["xcent"], params["ycent"], 0)
-        # Add angular uncertainties in deg.
-        pix_scale = proj_plane_pixel_scales(mywcs.celestial)
-        params["RAcent_err"] = pix_scale[0] * params["xcent_err"]
-        params["Deccent_err"] = pix_scale[1] * params["ycent_err"]
-    except IndexError:
-        warn("Cannot find fit to center. Assuming this was left fixed.")
+    # Now convert xcent and ycent to RA and Dec.
+    params["RAcent"], params["Deccent"] = \
+        mywcs.celestial.wcs_pix2world(params["xcent"], params["ycent"], 0)
+    # Add angular uncertainties in deg.
+    pix_scale = proj_plane_pixel_scales(mywcs.celestial)
+    params["RAcent_err"] = pix_scale[0] * params["xcent_err"]
+    params["Deccent_err"] = pix_scale[1] * params["ycent_err"]
 
-    params["Vsys"] = float(contents[44].split()[-3])
-    params["Vsys_err"] = float(contents[44].split()[-1])
+    if vel_free_params['Vsys']:
+        params["Vsys"] = float(contents[44].split()[-3])
+        params["Vsys_err"] = float(contents[44].split()[-1])
+    else:
+        params["Vsys"] = float(contents[24].split()[-1])
+        params["Vsys_err"] = np.NaN
 
     params["points_used"] = float(contents[56].split()[-1])
     params["iterations"] = float(contents[57].split()[-1])
