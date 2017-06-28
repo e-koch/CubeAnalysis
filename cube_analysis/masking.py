@@ -186,66 +186,8 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 
     for i, j in iter:
 
-        # Look for all pixels above min_snr
-        good_posns = np.where(snr[:, i, j] > min_snr)[0]
-
-        # Reject if the total is less than connectivity requirement
-        if good_posns.size < num_chans:
-            mask[:, i, j] = False
-            continue
-
-        # Find connected pixels
-        sequences = []
-        for k, g in groupby(enumerate(good_posns), lambda (i, x): i - x):
-            sequences.append(map(itemgetter(1), g))
-
-        # Check length and peak. Require a minimum of 3 pixels above the noise
-        # to grow from.
-        sequences = [seq for seq in sequences if len(seq) >= 3 and
-                     np.nanmax(snr[:, i, j][seq]) >= peak_snr]
-
-        # Continue if no good sequences found
-        if len(sequences) == 0:
-            mask[:, i, j] = False
-            continue
-
-        # Now take each valid sequence and expand the edges until the smoothed
-        # spectrum approaches zero.
-        edges = [[seq[0], seq[-1]] for seq in sequences]
-        for n, edge in enumerate(edges):
-            # Lower side
-            if n == 0:
-                start_posn = edge[0]
-                stop_posn = 0
-            else:
-                start_posn = edge[0] - edges[n - 1][0]
-                stop_posn = edges[n - 1][0]
-
-            for pt in np.arange(start_posn - 1, stop_posn, -1):
-                # if smoothed[pt] <= mad * edge_thresh:
-                if snr[pt] <= edge_thresh:
-                    break
-
-                sequences[n].insert(0, pt)
-
-            # Upper side
-            start_posn = edge[1]
-            if n == len(edges) - 1:
-                stop_posn = cube.shape[0]
-            else:
-                stop_posn = edges[n + 1][0]
-
-            for pt in np.arange(start_posn + 1, stop_posn, 1):
-                # if smoothed[pt] <= mad * edge_thresh:
-                if snr[pt] <= edge_thresh:
-                    break
-
-                sequences[n].append(pt)
-
-        # Final check for the min peak level and ensure all meet the
-        # spectral connectivity requirement
-        sequences = [seq for seq in sequences if len(seq) >= num_chans and
-                     np.nanmax(snr[:, i, j][seq]) >= peak_snr]
+        sequences = _get_mask_edges(snr[:, i, j], min_snr, peak_snr,
+                                    edge_thresh, num_chans)
 
         if len(sequences) == 0:
             mask[:, i, j] = False
@@ -507,6 +449,9 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans):
     # spectral connectivity requirement
     sequences = [seq for seq in sequences if len(seq) >= num_chans and
                  np.nanmax(snr[seq]) >= peak_snr]
+
+    for i in range(len(sequences)):
+        sequences[i].sort()
 
     return sequences
 
