@@ -221,9 +221,9 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
                 start_posn = edge[0] - edges[n - 1][0]
                 stop_posn = edges[n - 1][0]
 
-            for pt in np.arange(start_posn, stop_posn, -1):
+            for pt in np.arange(start_posn - 1, stop_posn, -1):
                 # if smoothed[pt] <= mad * edge_thresh:
-                if snr[:, i, j][pt] <= edge_thresh:
+                if snr[pt] <= edge_thresh:
                     break
 
                 sequences[n].insert(0, pt)
@@ -235,12 +235,12 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
             else:
                 stop_posn = edges[n + 1][0]
 
-            for pt in np.arange(start_posn, stop_posn, 1):
+            for pt in np.arange(start_posn + 1, stop_posn, 1):
                 # if smoothed[pt] <= mad * edge_thresh:
-                if snr[:, i, j][pt] <= edge_thresh:
+                if snr[pt] <= edge_thresh:
                     break
 
-                sequences[n].insert(0, pt)
+                sequences[n].append(pt)
 
         # Final check for the min peak level and ensure all meet the
         # spectral connectivity requirement
