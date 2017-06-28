@@ -81,3 +81,4 @@ def save_to_huge_fits(filename, cube, verbose=True, overwrite=False,
             output_fits.flush()
 
     output_fits.flush()
+    output_fits.close()
