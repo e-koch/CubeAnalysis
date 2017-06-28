@@ -64,18 +64,19 @@ def save_to_huge_fits(filename, cube, verbose=True, overwrite=False,
         if overwrite:
             raise IOError("{} already exists. Delete the file or enable "
                           "'overwrite'.".format(filename))
-        output_fits = fits.open(filename, mode='update')
     else:
         output_fits = create_huge_fits(filename, cube.header, verbose=verbose,
                                        dtype=cube[:, 0, 0].dtype,
-                                       return_hdu=True)
+                                       return_hdu=False)
+
+    output_fits = fits.open(filename, mode='update')
 
     for chan in xrange(cube.shape[0]):
         plane = cube[chan]
         if hasattr(plane, 'unit'):
             plane = plane.value
 
-        output_fits[0][chan, :, :] = plane
+        output_fits[0].data[chan, :, :] = plane
 
         if chan % chunk == 0:
             output_fits.flush()
