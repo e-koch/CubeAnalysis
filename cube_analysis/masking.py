@@ -421,8 +421,8 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans):
             start_posn = edge[0]
             stop_posn = 0
         else:
-            start_posn = edge[0] - edges[n - 1][0]
-            stop_posn = edges[n - 1][0]
+            start_posn = edge[0] - edges[n - 1][-1]
+            stop_posn = edges[n - 1][-1]
 
         for pt in np.arange(start_posn - 1, stop_posn, -1):
             # if smoothed[pt] <= mad * edge_thresh:
