@@ -256,6 +256,16 @@ def run_diskfit(param_file, data_path, fits_file_wcs, overwrite=True,
         smoothres_hdu.header["COMMENT"] = fit_comment
         smoothres_hdu.writeto("rad.fitres.fits", overwrite=True)
 
+        # Save the fit model parameters to the parameter file.
+        params['fit_n'] = pars[0]
+        params['fit_n_err'] = pcov[0, 0]
+        params['fit_vmax'] = pars[0]
+        params['fit_vmax_err'] = pcov[0, 0]
+        params['fit_n'] = pars[0]
+        params['fit_n_err'] = pcov[0, 0]
+        df = DataFrame(params, index=[0])
+        df.to_csv('rad.out.params.csv')
+
     # Return the the initial directory
     os.chdir(orig_direc)
 
