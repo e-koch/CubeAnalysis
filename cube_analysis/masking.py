@@ -388,7 +388,8 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     return masked_cube, mask
 
 
-def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans):
+def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
+                    min_chans=3):
     '''
     '''
 
@@ -404,7 +405,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans):
 
     # Check length and peak. Require a minimum of 3 pixels above the noise
     # to grow from.
-    sequences = [seq for seq in sequences if len(seq) >= 3 and
+    sequences = [seq for seq in sequences if len(seq) >= min_chans and
                  np.nanmax(snr[seq]) >= peak_snr]
 
     # Continue if no good sequences found
