@@ -12,7 +12,7 @@ from .progressbar import _map_context, ProgressBar
 from .feather_cubes import get_channel_chunks
 
 
-def fourier_shift(x, shift, axis=0):
+def fourier_shift(x, shift, axis=0, add_pad=False, pad_size=None):
     '''
     Shift a spectrum by a given number of pixels.
 
@@ -34,8 +34,27 @@ def fourier_shift(x, shift, axis=0):
     nonan = x.copy()
     nonan[mask] = 0.0
 
-    nonan_shift = _shifter(nonan, shift, axis)
-    mask_shift = _shifter(mask, shift, axis) > 0.5
+    # Optionally pad the edges
+    if add_pad:
+        if pad_size is None:
+            # Pad by the size of the shift
+            pad = np.ceil(shift).astype(int)
+
+            # Determine edge to pad whether it is a positive or negative shift
+            pad_size = (pad, 0) if shift > 0 else (0, pad)
+        else:
+            assert len(pad_size)
+
+        pad_nonan = np.pad(nonan, pad_size, mode='constant',
+                           constant_values=(0))
+        pad_mask = np.pad(mask, pad_size, mode='constant',
+                          constant_values=(0))
+    else:
+        pad_nonan = nonan
+        pad_mask = mask
+
+    nonan_shift = _shifter(pad_nonan, shift, axis)
+    mask_shift = _shifter(pad_mask, shift, axis) > 0.5
 
     nonan_shift[mask_shift] = np.NaN
 
@@ -88,15 +107,15 @@ def spectrum_shifter(spectrum, v0, vcent):
 
 
 def _spectrum_shifter(inputs):
-    y, x, spec, shift = inputs
+    y, x, spec, shift, add_pad, pad_size = inputs
 
-    return fourier_shift(spec, shift), y, x
+    return fourier_shift(spec, shift, add_pad=add_pad, pad_size=pad_size), y, x
 
 
 def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
                  save_name=None, xy_posns=None, num_cores=1,
                  return_spectra=True, chunk_size=20000, is_mask=False,
-                 verbose=False):
+                 verbose=False, pad_edges=False):
     '''
     Shift spectra in a cube according to a given velocity surface (peak
     velocity, centroid, rotation model, etc.).
@@ -124,8 +143,38 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
             raise u.UnitsError("v0 must have units equivalent to the cube's"
                                " spectral unit ().".format(spec_unit))
 
-    # Adjust the header to have velocities centered at v0.
+    # Calculate the pixel shifts that will be applied.
+    vdiff = np.abs(np.diff(cube.spectral_axis[:2])[0])
+    vel_unit = vdiff.unit
+
+    pix_shifts = ((velocity_surface.to(vel_unit) -
+                   v0.to(vel_unit)) / vdiff).value[xy_posns]
+
+    # May a header copy so we can start altering
     new_header = cube.header.copy()
+
+    if pad_edges:
+        # Enables padding the whole cube such that no spectrum will wrap around
+        # This is critical if a low-SB component is far off of the bright
+        # component that the velocity surface is derived from.
+
+        # Find max +/- pixel shifts, rounding up to the nearest integer
+        max_pos_shift = np.ceil(pix_shifts.max()).astype(int)
+        max_neg_shift = np.ceil(pix_shifts.min()).astype(int)
+
+        # The total pixel size of the new spectral axis
+        num_vel_pix = cube.spectral_axis.size + max_pos_shift - max_neg_shift
+        new_header['NAXIS3'] = num_vel_pix
+
+        # Adjust CRPIX in header
+        new_header['CRPIX3'] += max_pos_shift
+
+        pad_size = (max_pos_shift, -max_neg_shift)
+
+    else:
+        pad_size = None
+
+    # Adjust the header to have velocities centered at v0.
     new_header["CRVAL3"] = new_header["CRVAL3"] - v0.to(u.m / u.s).value
 
     if save_shifted:
@@ -142,13 +191,6 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         all_shifted_spectra = []
         out_posns = []
 
-    # Calculate the pixel shifts that will be applied.
-    vdiff = np.abs(np.diff(cube.spectral_axis[:2])[0])
-    vel_unit = vdiff.unit
-
-    pix_shifts = ((velocity_surface.to(vel_unit) -
-                   v0.to(vel_unit)) / vdiff).value[xy_posns]
-
     n_chunks = len(xy_posns[0]) / chunk_size
 
     # Create chunks of spectra for read-out.
@@ -157,7 +199,8 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
         log.info("On chunk {0} of {1}".format(i + 1, n_chunks))
 
-        gen = [(y, x, cube.unmasked_data[:, y, x], shift) for y, x, shift in
+        gen = [(y, x, cube.unmasked_data[:, y, x], shift, pad_edges, pad_size)
+               for y, x, shift in
                izip(xy_posns[0][chunk], xy_posns[1][chunk], pix_shifts[chunk])]
 
         with _map_context(num_cores, verbose=verbose,
