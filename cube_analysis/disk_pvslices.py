@@ -18,6 +18,34 @@ def disk_pvslices(cube, gal, thetas, pv_width, max_rad, verbose=True,
     The position angles are measured with respect to the position angle of the
     galaxy's major axis.
 
+    Parameters
+    ----------
+    cube : spectral_cube.SpectralCube
+        Cube to extract slice from.
+    gal : galaxies.Galaxy
+        Galaxy object containing information about the system.
+    thetas : astropy.units.Quantity
+        Angles, with respect to the major axis of the disk, to create PV-slices
+        at.
+    pv_width : astropy.units.Quantity
+        Width of each PV-slice in physical or angular units.
+    max_rad : astropy.units.Quantity
+        Maximum radius in the disk to create the profile from.
+    verbose : bool, optional
+        Enables a progress bar.
+    save_name : str, optional
+        Base file name to save the pv-slices with. Enables saving the
+        pv-slices.
+    quicklook : bool, optional
+        Plots the path for the pv-slice on the zeroth moment map. Requires
+        a spectral_cube.Projection be given for `mom0`. Requires the user
+        to continue the loop at each iteration.
+    mom0 : spectral_cube.Projection, optional
+        A zeroth moment map used for plotting the paths with `quicklook`.
+    save_kwargs : dict, optional
+        Pass arguments for saving the pv-slice (e.g., `dict(overwrite=True)`)
+    save_regions : bool, optional
+        Enable saving the pv-slice regions as a DS9 region file.
     '''
 
     assert isinstance(gal, Galaxy)
