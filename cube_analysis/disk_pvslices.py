@@ -143,7 +143,7 @@ def disk_pvslices(cube, gal, thetas, pv_width, max_rad, verbose=True,
             rect_region = RectangleSkyRegion(center=gal.center_position,
                                              height=Angle(pv_width.to(u.deg)),
                                              width=Angle(ang_length.to(u.deg)),
-                                             angle=Angle(theta + gal.position_angle - 90 * u.deg))
+                                             angle=Angle(theta + gal.position_angle))
 
             rect_regions.append(rect_region)
 
