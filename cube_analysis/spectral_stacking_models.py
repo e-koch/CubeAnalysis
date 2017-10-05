@@ -100,6 +100,11 @@ def fit_hwhm(vels, spectrum, asymm='full'):
     '''
     Scale the inner Gaussian to the HWHM of the profile.
 
+    Extracts the equivalent inner gaussian width, the fraction of flux in the
+    wings, the equivalent width of the wings, and the asymmetry of the wings or
+    profile. Each of these is defined in Stilp et al. (2013).
+    https://ui.adsabs.harvard.edu/#abs/2013ApJ...765..136S/abstract
+
     Parameters
     ----------
     asymm : str, optional
