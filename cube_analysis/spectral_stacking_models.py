@@ -161,4 +161,7 @@ def fit_hwhm(vels, spectrum, asymm='full'):
     else:
         raise TypeError("asymm must be 'full' or 'wings'.")
 
-    return sigma, f_wings, sigma_wing, asymm_val, hwhm_gauss
+    params = np.array([sigma, f_wings, sigma_wing, asymm_val])
+    param_names = ["sigma,", "f_wings", "sigma_wing", "asymm"]
+
+    return params, param_names, hwhm_gauss
