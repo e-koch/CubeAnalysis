@@ -41,7 +41,7 @@ def fit_2gaussian(vels, spectrum):
     parvals = [v for (n, v) in zip(g_HI.param_names, g_HI.parameters)
                if n in parnames]
 
-    return parvals, cov, g_HI
+    return parvals, cov, parnames, g_HI
 
 
 def fit_gaussian(vels, spectrum):
@@ -65,10 +65,10 @@ def fit_gaussian(vels, spectrum):
 
     # The covariance matrix is hidden away... tricksy
     cov = fit_g.fit_info['param_cov']
-
+    parnames = g_HI.param_names
     parvals = g_HI.parameters
 
-    return parvals, cov, g_HI
+    return parvals, cov, parnames, g_HI
 
 
 def find_hwhm(vels, spectrum):
