@@ -26,7 +26,7 @@ def total_profile(cube, spatial_mask=None, how='slice'):
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
-                    pa_bounds=None, num_cores=1, verbose=False):
+                    pa_bounds=None, num_cores=1, verbose=False, how='slice'):
     '''
     Radially stack spectra.
     '''
@@ -74,8 +74,8 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
         spec_mask = np.logical_and(rad_mask, pa_mask)
 
         stacked_spectra[ctr] = \
-            total_profile(cube, spec_mask, num_cores=num_cores,
-                          verbose=verbose)
+            total_profile(cube, spec_mask,  # num_cores=num_cores,
+                          how=how)
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
@@ -83,7 +83,7 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
 
 
 def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
-                        max_val=None, verbose=False):
+                        max_val=None, verbose=False, how='slice'):
     '''
     Stack spectra in a cube based on the values in a given 2D image. For
     example, give the peak temperature array to stack based on percentile of
@@ -127,8 +127,8 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
 
         mask = np.logical_and(proj >= p0, proj < p1)
 
-        stacked_spectra[ctr] = total_profile(cube, mask, num_cores=num_cores,
-                                             verbose=verbose)
+        stacked_spectra[ctr] = total_profile(cube, mask,  # num_cores=num_cores,
+                                             how=how)
 
     bin_centers = inneredge + dperc / 2.
 
