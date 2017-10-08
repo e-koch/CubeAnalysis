@@ -74,6 +74,9 @@ def fit_gaussian(vels, spectrum, p0=None):
     parnames = g_HI.param_names
     parvals = g_HI.parameters
 
+    # Sometimes the width is negative
+    parvals[-1] = np.abs(parvals[-1])
+
     return parvals, cov, parnames, g_HI
 
 
