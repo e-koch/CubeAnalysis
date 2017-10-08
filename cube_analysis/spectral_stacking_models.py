@@ -69,6 +69,8 @@ def fit_gaussian(vels, spectrum, p0=None):
 
     # The covariance matrix is hidden away... tricksy
     cov = fit_g.fit_info['param_cov']
+    if cov is None:
+        cov = np.zeros((3, 3)) * np.NaN
     parnames = g_HI.param_names
     parvals = g_HI.parameters
 
