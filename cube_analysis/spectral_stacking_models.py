@@ -44,16 +44,20 @@ def fit_2gaussian(vels, spectrum):
     return parvals, cov, parnames, g_HI
 
 
-def fit_gaussian(vels, spectrum):
+def fit_gaussian(vels, spectrum, p0=None):
     '''
     Fit a Gaussian model.
     '''
 
-    max_vel = vels[np.argmax(spectrum)]
-    specmax = spectrum.max()
+    if p0 is None:
+        max_vel = vels[np.argmax(spectrum)]
+        specmax = spectrum.max()
 
-    # Estimate the inner width from the HWHM
-    sigma_est = find_hwhm(vels, spectrum)[0]
+        # Estimate the inner width from the HWHM
+        sigma_est = find_hwhm(vels, spectrum)[0]
+    else:
+        specmax, max_vel, sigma_est = p0
+
     # Use this as the narrow estimate, and let the wide guess be 3x
 
     g_HI_init = models.Gaussian1D(amplitude=specmax, mean=max_vel,
@@ -87,6 +91,10 @@ def find_hwhm(vels, spectrum):
                                            spec_for_interp - halfmax, k=3)
 
     fwhm_points = interp1.roots()
+    if len(fwhm_points) < 2:
+        raise ValueError("Found less than 2 roots!")
+    # Only keep the min/max if there are multiple
+    fwhm_points = (min(fwhm_points), max(fwhm_points))
 
     fwhm = fwhm_points[1] - fwhm_points[0]
 
