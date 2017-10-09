@@ -127,7 +127,8 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
 
 def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
                              min_snr=2, edge_thresh=1, show_plots=False,
-                             noise_map=None, verbose=False):
+                             noise_map=None, verbose=False,
+                             spatial_kernel='beam'):
     '''
     Create a robust signal mask by requiring spatial and spectral
     connectivity.
@@ -225,31 +226,40 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     # initial_mask = mask.copy()
 
     # Now set the spatial connectivity requirements.
-
-    kernel = cube.beam.as_tophat_kernel(pixscale)
-    # kernel = Beam(major=0.75 * cube.beam.major, minor=0.75 * cube.beam.minor,
-    #               pa=cube.beam.pa).as_tophat_kernel(pixscale)
-    kernel_pix = (kernel.array > 0).sum()
-
-    # Avoid edge effects in closing by padding by 1 in each axis
-    mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
-                  constant_values=False)
-
-    if verbose:
-        iter = ProgressBar(mask.shape[0])
+    if spatial_kernel is "beam":
+        kernel = cube.beam.as_tophat_kernel(pixscale)
+        # kernel = Beam(major=0.75 * cube.beam.major,
+        #               minor=0.75 * cube.beam.minor,
+        #               pa=cube.beam.pa).as_tophat_kernel(pixscale)
+        kernel_pix = (kernel.array > 0).sum()
     else:
-        iter = xrange(mask.shape[0])
+        if isinstance(spatial_kernel, np.ndarray):
+            kernel = spatial_kernel
+            kernel_pix = (kernel > 0).sum()
+        else:
+            kernel = None
 
-    for i in iter:
-        mask[i] = nd.binary_opening(mask[i], kernel)
-        mask[i] = nd.binary_closing(mask[i], kernel)
-        mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
-                                          connectivity=2)
-        mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
-                                        connectivity=2)
+    if kernel is not None:
 
-    # Remove padding
-    mask = mask[:, 1:-1, 1:-1]
+        # Avoid edge effects in closing by padding by 1 in each axis
+        mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
+                      constant_values=False)
+
+        if verbose:
+            iter = ProgressBar(mask.shape[0])
+        else:
+            iter = xrange(mask.shape[0])
+
+        for i in iter:
+            mask[i] = nd.binary_opening(mask[i], kernel)
+            mask[i] = nd.binary_closing(mask[i], kernel)
+            mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
+                                              connectivity=2)
+            mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
+                                            connectivity=2)
+
+        # Remove padding
+        mask = mask[:, 1:-1, 1:-1]
 
     # Each region must contain a point above the peak_snr
     labels, num = nd.label(mask, np.ones((3, 3, 3)))
@@ -266,7 +276,7 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
                                      peak_snr=5., min_snr=2, edge_thresh=1,
                                      show_plots=False, noise_map=None,
-                                     verbose=False):
+                                     verbose=False, spatial_kernel='beam'):
     '''
     Uses the same approach as `~ppv_connectivity_masking`, but avoids doing
     any operations with the full cube. This will take longer, but will use
@@ -347,34 +357,44 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     # initial_mask = mask.copy()
 
     # Now set the spatial connectivity requirements.
+    if spatial_kernel is "beam":
 
-    if hasattr(cube, 'beams'):
-        kernel = largest_beam(cube.beams).as_tophat_kernel(pixscale)
-    elif hasattr(cube, 'beam'):
-        kernel = cube.beam.as_tophat_kernel(pixscale)
+        if hasattr(cube, 'beams'):
+            kernel = largest_beam(cube.beams).as_tophat_kernel(pixscale)
+        elif hasattr(cube, 'beam'):
+            kernel = cube.beam.as_tophat_kernel(pixscale)
+        else:
+            raise AttributeError("cube doesn't have 'beam' or 'beams'?")
+        kernel_pix = (kernel.array > 0).sum()
+
     else:
-        raise AttributeError("cube doesn't have 'beam' or 'beams'?")
-    kernel_pix = (kernel.array > 0).sum()
+        if isinstance(spatial_kernel, np.ndarray):
+            kernel = spatial_kernel
+            kernel_pix = (kernel > 0).sum()
+        else:
+            kernel = None
 
-    # Avoid edge effects in closing by padding by 1 in each axis
-    mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
-                  constant_values=False)
+    if kernel is not None:
 
-    if verbose:
-        iter = ProgressBar(mask.shape[0])
-    else:
-        iter = xrange(mask.shape[0])
+        # Avoid edge effects in closing by padding by 1 in each axis
+        mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
+                      constant_values=False)
 
-    for i in iter:
-        mask[i] = nd.binary_opening(mask[i], kernel)
-        mask[i] = nd.binary_closing(mask[i], kernel)
-        mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
-                                          connectivity=2)
-        mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
-                                        connectivity=2)
+        if verbose:
+            iter = ProgressBar(mask.shape[0])
+        else:
+            iter = xrange(mask.shape[0])
 
-    # Remove padding
-    mask = mask[:, 1:-1, 1:-1]
+        for i in iter:
+            mask[i] = nd.binary_opening(mask[i], kernel)
+            mask[i] = nd.binary_closing(mask[i], kernel)
+            mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
+                                              connectivity=2)
+            mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
+                                            connectivity=2)
+
+        # Remove padding
+        mask = mask[:, 1:-1, 1:-1]
 
     # Each region must contain a point above the peak_snr
     labels, num = nd.label(mask, np.ones((3, 3, 3)))
