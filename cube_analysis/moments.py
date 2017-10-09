@@ -31,6 +31,52 @@ def _peak_velocity(args):
         return spec.spectral_axis[argmax]
 
 
+def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
+                      in_memory=False, num_cores=1, verbose=False):
+    '''
+    Calculate the peak velocity surface of a spectral cube
+    '''
+
+    peakvels = Projection(np.zeros(cube.shape[1:]),
+                          wcs=cube.wcs.celestial,
+                          unit=cube.spectral_axis.unit)
+
+    if source_mask is not None:
+        posns = np.where(source_mask.sum(0) > 0)
+    else:
+        posns = np.indices(cube[0].shape)
+
+    chunk_size = int(chunk_size)
+    chunk_idx = get_channel_chunks(posns[0].size, chunk_size)
+
+    for i, chunk in enumerate(chunk_idx):
+
+        log.info("On chunk {0} of {1}".format(i + 1, len(chunk_idx)))
+
+        y_posn = posns[0][chunk]
+        x_posn = posns[1][chunk]
+
+        if in_memory:
+            gener = [(cube[:, y, x], smooth_size)
+                     for y, x in izip(y_posn, x_posn)]
+        else:
+            gener = ((cube[:, y, x], smooth_size)
+                     for y, x in izip(y_posn, x_posn))
+
+        with _map_context(num_cores, verbose=verbose) as map:
+            output = map(_peak_velocity, gener)
+
+        for out, y, x in izip(output, y_posn, x_posn):
+            peakvels[y, x] = out
+
+    peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
+    # Make sure there are no garbage points outside of the cube spectral range
+    peakvels[peakvels < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
+    peakvels[peakvels > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
+
+    return peakvels
+
+
 def make_moments(cube_name, mask_name, output_folder, freq=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
                  in_memory=False, smooth_size=None):
@@ -100,39 +146,10 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     peaktemps_name = "{}.peaktemps.fits".format(cube_name.rstrip(".fits"))
     peak_temps.write(peaktemps_name, overwrite=True)
 
-    peakvels = Projection(np.zeros(cube.shape[1:]),
-                          wcs=cube.wcs.celestial,
-                          unit=cube.spectral_axis.unit)
+    peakvels = find_peakvelocity(cube, source_mask, chunk_size=chunk_size,
+                                 smooth_size=smooth_size, in_memory=in_memory,
+                                 num_cores=num_cores, verbose=verbose)
 
-    posns = np.where(source_mask.sum(0) > 0)
-
-    chunk_size = int(chunk_size)
-    chunk_idx = get_channel_chunks(posns[0].size, chunk_size)
-
-    for i, chunk in enumerate(chunk_idx):
-
-        log.info("On chunk {0} of {1}".format(i + 1, len(chunk_idx)))
-
-        y_posn = posns[0][chunk]
-        x_posn = posns[1][chunk]
-
-        if in_memory:
-            gener = [(cube[:, y, x], smooth_size)
-                     for y, x in izip(y_posn, x_posn)]
-        else:
-            gener = ((cube[:, y, x], smooth_size)
-                     for y, x in izip(y_posn, x_posn))
-
-        with _map_context(num_cores, verbose=verbose) as map:
-            output = map(_peak_velocity, gener)
-
-        for out, y, x in izip(output, y_posn, x_posn):
-            peakvels[y, x] = out
-
-    peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
-    # Make sure there are no garbage points outside of the cube spectral range
-    peakvels[peakvels < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
-    peakvels[peakvels > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
     peakvels = peakvels.astype(np.float32)
     peakvels.header["BITPIX"] = -32
     peakvels_name = "{}.peakvels.fits".format(cube_name.rstrip(".fits"))
