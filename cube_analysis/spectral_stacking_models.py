@@ -41,7 +41,18 @@ def fit_2gaussian(vels, spectrum):
     parvals = [v for (n, v) in zip(g_HI.param_names, g_HI.parameters)
                if n in parnames]
 
-    return parvals, cov, parnames, g_HI
+    chan_width = np.diff(vels[:2])[0]
+    parerrs = []
+    for name, var in zip(parnames, np.diag(cov)):
+        if "mean" in name or "stddev" in name:
+            # Add the finite channel width in quadrature
+            stderr = np.sqrt(var + (0.5 * chan_width)**2)
+        else:
+            stderr = np.sqrt(var)
+
+        parerrs.append(stderr)
+
+    return parvals, parerrs, cov, parnames, g_HI
 
 
 def fit_gaussian(vels, spectrum, p0=None):
@@ -77,7 +88,18 @@ def fit_gaussian(vels, spectrum, p0=None):
     # Sometimes the width is negative
     parvals[-1] = np.abs(parvals[-1])
 
-    return parvals, cov, parnames, g_HI
+    chan_width = np.diff(vels[:2])[0]
+    parerrs = []
+    for name, var in zip(parnames, np.diag(cov)):
+        if "mean" in name or "stddev" in name:
+            # Add the finite channel width in quadrature
+            stderr = np.sqrt(var + (0.5 * chan_width)**2)
+        else:
+            stderr = np.sqrt(var)
+
+        parerrs.append(stderr)
+
+    return parvals, parerrs, cov, parnames, g_HI
 
 
 def find_hwhm(vels, spectrum):
