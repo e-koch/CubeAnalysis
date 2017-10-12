@@ -6,7 +6,7 @@ import numpy as np
 import astropy.units as u
 from astropy.io import fits
 from astropy import log
-from scipy.signal import medfilt
+from astropy.convolution import Gaussian1DKernel
 from itertools import izip
 import os
 import glob
@@ -20,14 +20,14 @@ def _peak_velocity(args):
     Return the velocity at the peak of a spectrum.
     '''
 
-    spec, smooth_size = args
+    spec, kern = args
 
-    # smooth_size = 31
-
-    if smooth_size is None:
+    if kern is None:
         return spec.spectral_axis[np.argmax(spec.value)]
     else:
-        argmax = np.argmax(medfilt(spec.value, smooth_size))
+        smooth_spec = spec.spectral_smooth(kern)
+        argmax = np.argmax(smooth_spec.value)
+
         return spec.spectral_axis[argmax]
 
 
@@ -37,7 +37,7 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
     Calculate the peak velocity surface of a spectral cube
     '''
 
-    peakvels = Projection(np.zeros(cube.shape[1:]),
+    peakvels = Projection(np.zeros(cube.shape[1:]) * np.NaN,
                           wcs=cube.wcs.celestial,
                           unit=cube.spectral_axis.unit)
 
@@ -49,6 +49,11 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
     chunk_size = int(chunk_size)
     chunk_idx = get_channel_chunks(posns[0].size, chunk_size)
 
+    if smooth_size is not None:
+        kern = Gaussian1DKernel(smooth_size)
+    else:
+        kern = None
+
     for i, chunk in enumerate(chunk_idx):
 
         log.info("On chunk {0} of {1}".format(i + 1, len(chunk_idx)))
@@ -57,10 +62,10 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
         x_posn = posns[1][chunk]
 
         if in_memory:
-            gener = [(cube[:, y, x], smooth_size)
+            gener = [(cube[:, y, x], kern)
                      for y, x in izip(y_posn, x_posn)]
         else:
-            gener = ((cube[:, y, x], smooth_size)
+            gener = ((cube[:, y, x], kern)
                      for y, x in izip(y_posn, x_posn))
 
         with _map_context(num_cores, verbose=verbose) as map:
@@ -69,7 +74,7 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
         for out, y, x in izip(output, y_posn, x_posn):
             peakvels[y, x] = out
 
-    peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
+    # peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
     # Make sure there are no garbage points outside of the cube spectral range
     peakvels[peakvels < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
     peakvels[peakvels > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
