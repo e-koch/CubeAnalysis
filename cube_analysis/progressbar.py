@@ -4,6 +4,7 @@ import time
 import signal
 import multiprocessing
 from functools import partial
+import numpy as np
 from astropy.utils.console import (_get_stdout, isatty, isiterable,
                                    human_file_size, _CAN_RESIZE_TERMINAL,
                                    terminal_size, color_print, human_time)
@@ -310,6 +311,10 @@ class ProgressBar(six.Iterator):
 
         with cls(item_len, file=file) as bar:
             if not multiprocess:
+                # Here chunksize is just how frequently the progress gets
+                # updated
+                if chunksize is None:
+                    chunksize = np.floor(item_len / 100.).astype(int)
                 for i, item in enumerate(items):
                     results.append(function(item))
                     if (i % chunksize) == 0:
