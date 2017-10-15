@@ -6,6 +6,7 @@ Basic models for decomposing large-scale stacked profiles
 import numpy as np
 from astropy.modeling import models, fitting
 from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.special import erf
 
 
 def fit_2gaussian(vels, spectrum):
@@ -146,6 +147,15 @@ def fit_hwhm(vels, spectrum, asymm='full'):
     profile. Each of these is defined in Stilp et al. (2013).
     https://ui.adsabs.harvard.edu/#abs/2013ApJ...765..136S/abstract
 
+    One additional parameter has been added:
+
+    kappa = Sum_i (Data_i - Gauss_i) / Sum_i (Gauss_i)
+    for i within the FWHM.
+
+    kappa measures the kurtic behaviour of the peak. If negative, the peak
+    is leptokurtic (more peaked). If positive, the peak is playkurtic
+    (less peaked).
+
     Parameters
     ----------
     asymm : str, optional
@@ -158,9 +168,10 @@ def fit_hwhm(vels, spectrum, asymm='full'):
 
     maxpos = np.argmax(spec_for_interp)
     maxvel = vels_for_interp[maxpos]
+    maxval = spectrum.max()
 
     # Define a Gaussian with this width
-    hwhm_gauss = models.Gaussian1D(amplitude=spectrum.max(), mean=maxvel,
+    hwhm_gauss = models.Gaussian1D(amplitude=maxval, mean=maxvel,
                                    stddev=sigma)
 
     low_mask = vels_for_interp < fwhm_points[0]
@@ -202,7 +213,20 @@ def fit_hwhm(vels, spectrum, asymm='full'):
     else:
         raise TypeError("asymm must be 'full' or 'wings'.")
 
-    params = np.array([sigma, f_wings, sigma_wing, asymm_val])
-    param_names = ["sigma,", "f_wings", "sigma_wing", "asymm"]
+    fwhm_mask = np.logical_and(vels_for_interp > fwhm_points[0],
+                               vels_for_interp < fwhm_points[1])
+
+    # Fraction of Gaussian area within the FWHM
+    fwhm_area_conv = erf(np.sqrt(np.log(2)))
+    fwhm_area = maxval * np.sqrt(2 * np.pi) * sigma * fwhm_area_conv
+
+    diff_vel = np.diff(vels_for_interp[:2])[0]
+
+    kappa = np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
+                    zip(spec_for_interp[fwhm_mask],
+                        vels_for_interp[fwhm_mask])]) * diff_vel / fwhm_area
+
+    params = np.array([sigma, f_wings, sigma_wing, asymm_val, kappa])
+    param_names = ["sigma,", "f_wings", "sigma_wing", "asymm", "kappa"]
 
     return params, param_names, hwhm_gauss
