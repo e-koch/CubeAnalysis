@@ -227,6 +227,6 @@ def fit_hwhm(vels, spectrum, asymm='full'):
                         vels_for_interp[fwhm_mask])]) * diff_vel / fwhm_area
 
     params = np.array([sigma, f_wings, sigma_wing, asymm_val, kappa])
-    param_names = ["sigma,", "f_wings", "sigma_wing", "asymm", "kappa"]
+    param_names = ["sigma", "f_wings", "sigma_wing", "asymm", "kappa"]
 
     return params, param_names, hwhm_gauss
