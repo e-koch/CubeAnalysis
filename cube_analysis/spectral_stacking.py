@@ -62,6 +62,7 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
         pa_mask = np.ones(cube.shape[1:], dtype=bool)
 
     stacked_spectra = np.zeros((inneredge.size, cube.shape[0])) * cube.unit
+    num_pixels = np.zeros(inneredge.size)
 
     for ctr, (r0, r1) in enumerate(zip(inneredge,
                                        outeredge)):
@@ -77,9 +78,11 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
             total_profile(cube, spec_mask,  # num_cores=num_cores,
                           how=how)
 
+        num_pixels[ctr] = len(spec_mask)
+
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
-    return bin_centers, stacked_spectra
+    return bin_centers, stacked_spectra, num_pixels
 
 
 def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
@@ -118,6 +121,7 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
     outeredge[-1] += 1e-3 * unit
 
     stacked_spectra = np.zeros((inneredge.size, cube.shape[0])) * cube.unit
+    num_pixels = np.zeros(inneredge.size)
 
     for ctr, (p0, p1) in enumerate(zip(inneredge,
                                        outeredge)):
@@ -129,7 +133,8 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
 
         stacked_spectra[ctr] = total_profile(cube, mask,  # num_cores=num_cores,
                                              how=how)
+        num_pixels[ctr] = len(spec_mask)
 
     bin_centers = inneredge + dperc / 2.
 
-    return bin_centers, stacked_spectra
+    return bin_centers, stacked_spectra, num_pixels
