@@ -78,7 +78,7 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
             total_profile(cube, spec_mask,  # num_cores=num_cores,
                           how=how)
 
-        num_pixels[ctr] = len(spec_mask)
+        num_pixels[ctr] = spec_mask.sum()
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
@@ -133,7 +133,7 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
 
         stacked_spectra[ctr] = total_profile(cube, mask,  # num_cores=num_cores,
                                              how=how)
-        num_pixels[ctr] = len(spec_mask)
+        num_pixels[ctr] = spec_mask.sum()
 
     bin_centers = inneredge + dperc / 2.
 
