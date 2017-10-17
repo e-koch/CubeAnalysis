@@ -7,6 +7,7 @@ import numpy as np
 from astropy.modeling import models, fitting
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.special import erf
+from functools import partial
 
 
 def fit_2gaussian(vels, spectrum):
@@ -138,7 +139,7 @@ def find_hwhm(vels, spectrum):
     return sigma, fwhm_points, vels_for_interp, spec_for_interp
 
 
-def fit_hwhm(vels, spectrum, asymm='full'):
+def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1):
     '''
     Scale the inner Gaussian to the HWHM of the profile.
 
@@ -192,9 +193,9 @@ def fit_hwhm(vels, spectrum, asymm='full'):
                             vels_for_interp[low_mask])]) +
                 np.sum([vel**2 * (spec - hwhm_gauss(vel)) for spec, vel in
                         zip(spec_for_interp[high_mask],
-                            vels_for_interp[high_mask])])) /\
-        tail_flux_excess
-    sigma_wing = np.sqrt(var_wing)
+                            vels_for_interp[high_mask])]))
+
+    sigma_wing = np.sqrt(var_wing / tail_flux_excess)
 
     if asymm == "full":
         neg_iter = range(maxpos - 1, -1, -1)
@@ -226,7 +227,113 @@ def fit_hwhm(vels, spectrum, asymm='full'):
                     zip(spec_for_interp[fwhm_mask],
                         vels_for_interp[fwhm_mask])]) * diff_vel / fwhm_area
 
-    params = np.array([sigma, f_wings, sigma_wing, asymm_val, kappa])
-    param_names = ["sigma", "f_wings", "sigma_wing", "asymm", "kappa"]
+    # Estimate uncertainties if sigma_noise is given.
+    param_stderrs = np.zeros((5,))
+    if sigma_noise is not None:
 
-    return params, param_names, hwhm_gauss
+        # Error for each value in the profile
+        delta_S = sigma_noise * np.sqrt(nbeams)
+
+        # Error in sigma is channel_width / 2 sqrt(2 ln 2), from the uncertainty
+        # on each location at the FWHM having the channel width as an error
+        chan_width = np.abs(np.diff(vels[:2])[0])
+
+        delta_sigma = chan_width / (2 * np.sqrt(2 * np.log(2)))
+
+        # Error in peak velocity should approach channel width ASSUMING the
+        # shuffling is optimized
+        delta_v_peak = chan_width / 2.
+
+        g_uncert = partial(gauss_uncert, model=hwhm_gauss,
+                           chan_width=chan_width,
+                           nbeams=nbeams, sigma_noise=sigma_noise)
+
+        # Assume the only significant error comes from the noise in the profile
+        wing_term1 = (np.sum([delta_S + g_uncert(vel) for vel in
+                              vels_for_interp[low_mask]]) +
+                      np.sum([delta_S + g_uncert(vel) for vel in
+                              vels_for_interp[high_mask]]))
+
+        wing_term2 = len(spec_for_interp) * delta_S
+
+        delta_f_wings = f_wings * np.sqrt((wing_term1 / tail_flux_excess)**2 +
+                                          (wing_term2 / np.sum(spectrum))**2)
+
+        sigw_term1 = (np.sum([(delta_S + g_uncert(vel)) * vel**2 for vel in
+                              vels_for_interp[low_mask]]) +
+                      np.sum([(delta_S + g_uncert(vel)) * vel**2 for vel in
+                              vels_for_interp[high_mask]]))
+
+        sigw_term2 = wing_term1
+
+        delta_sigma_wing = 0.5 * sigma_wing * \
+            np.sqrt((sigw_term1 / var_wing) +
+                    (sigw_term2 / tail_flux_excess)**2)
+
+        if asymm == "full":
+            delta_a = asymm_val * len(spectrum) * delta_S * \
+                np.sqrt((2 / (asymm_val * np.sum(spectrum)))**2 +
+                        (np.sum(spectrum))**-2)
+        else:
+
+            a_term2 = wing_term1
+
+            n_vals = len(neg_iter) + len(pos_iter)
+
+            delta_a = asymm_val * \
+                np.sqrt((2 * n_vals * delta_S / (asymm_val * tail_flux_excess))**2 +
+                        (a_term2 / tail_flux_excess)**2)
+
+        kap_term1_denom = \
+                np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
+                        zip(spec_for_interp[fwhm_mask],
+                            vels_for_interp[fwhm_mask])])
+        kap_term1_numer = np.sum([delta_S + g_uncert(vel) for vel in
+                                 vels_for_interp[fwhm_mask]])
+
+        kap_term2_numer = \
+            np.sum([g_uncert(vel) for vel in vels_for_interp[fwhm_mask]])
+        kap_term2_denom = \
+            np.sum([hwhm_gauss(vel) for vel in vels_for_interp[fwhm_mask]])
+
+        delta_kappa = np.abs(kappa) * \
+            np.sqrt((kap_term1_numer / kap_term1_denom)**2 +
+                    (kap_term2_numer / kap_term2_denom)**2)
+
+        param_stderrs = np.array([delta_sigma, delta_v_peak, delta_f_wings,
+                                  delta_sigma_wing, delta_a, delta_kappa])
+
+    params = np.array([sigma, maxvel, f_wings, sigma_wing, asymm_val, kappa])
+    param_names = ["sigma", "v_peak", "f_wings", "sigma_wing", "asymm",
+                   "kappa"]
+
+    return params, param_stderrs, param_names, hwhm_gauss
+
+
+def gauss_uncert(vel, model, chan_width, nbeams, sigma_noise):
+    '''
+    Return the uncertainty of the assumed HWHM Gaussian. Assumes errors to be
+    propagated in quadrature and without correlations.
+    '''
+
+    mod_val = model(vel)
+
+    # Uncertainties in v_peak and sigma assumed to arise solely from the
+    # finite velocity resolution -- taken at half the channel width
+
+    sigma = model.stddev.value
+    v_peak = model.mean.value
+    amp = model.amplitude.value
+
+    diff_vel = (vel - v_peak)
+
+    # Width uncertainty
+    term1 = (diff_vel**2 * chan_width / sigma**3)**2 / (8 * np.log(2))
+
+    # mean uncertainty
+    term2 = (0.5 * diff_vel * chan_width / sigma**2)**2
+
+    # amp uncertainty
+    term3 = nbeams * (sigma_noise / amp)**2
+
+    return mod_val * np.sqrt(term1 + term2 + term3)
