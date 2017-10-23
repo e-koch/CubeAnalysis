@@ -118,11 +118,20 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     linewidth.write(os.path.join(lwidth_name),
                     overwrite=True)
 
+    # Higher moments
+    # Not that +/- chan size now matters for skewness. But spectral_cube only
+    # takes the abs value of the channel size. Check whether the spectral axis
+    # is increasing or decreasing
+    if np.diff(cube.spectral_axis[:2].value)[0] < 0:
+        mult_fact = -1.
+    else:
+        mult_fact = 1.
+
     # Skewness
     mom3 = cube.moment(order=3, axis=0)
 
     # Normalize third moment by the linewidth to get the skewness
-    skew = mom3 / linewidth ** 3
+    skew = mult_fact * mom3 / linewidth ** 3
     skew_name = "{}.skewness.fits".format(cube_name.rstrip(".fits"))
     skew.write(os.path.join(skew_name),
                overwrite=True)
