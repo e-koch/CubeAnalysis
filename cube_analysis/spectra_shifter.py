@@ -115,7 +115,7 @@ def _spectrum_shifter(inputs):
 def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
                  save_name=None, xy_posns=None, num_cores=1,
                  return_spectra=True, chunk_size=20000, is_mask=False,
-                 verbose=False, pad_edges=False):
+                 verbose=False, pad_edges=True):
     '''
     Shift spectra in a cube according to a given velocity surface (peak
     velocity, centroid, rotation model, etc.).
