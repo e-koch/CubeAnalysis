@@ -110,7 +110,7 @@ def fit_gaussian(vels, spectrum, p0=None):
     return parvals, parerrs, cov, parnames, g_HI
 
 
-def find_hwhm(vels, spectrum):
+def find_hwhm(vels, spectrum, interp_factor=10):
     '''
     Return the equivalent Gaussian sigma based on the HWHM positions.
     '''
@@ -136,10 +136,20 @@ def find_hwhm(vels, spectrum):
     # Convert to equivalent Gaussian sigma
     sigma = fwhm / np.sqrt(8 * np.log(2))
 
-    return sigma, fwhm_points, vels_for_interp, spec_for_interp
+    # Upsample in velocity to estimate the peak position
+    interp_factor = float(interp_factor)
+    chan_size = np.diff(vels_for_interp[:2])[0] / interp_factor
+    upsamp_vels = np.linspace(vels_for_interp.min(),
+                              vels_for_interp.max() + 0.9 * chan_size,
+                              vels_for_interp.size * interp_factor)
+    upsamp_spec = interp1(upsamp_vels)
+    peak_velocity = upsamp_vels[np.argmax(upsamp_spec)]
+
+    return sigma, fwhm_points, peak_velocity, vels_for_interp, spec_for_interp
 
 
-def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1):
+def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
+             interp_factor=10):
     '''
     Scale the inner Gaussian to the HWHM of the profile.
 
@@ -164,15 +174,15 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1):
         only calculate it in the wings.
     '''
 
-    sigma, fwhm_points, vels_for_interp, spec_for_interp = \
-        find_hwhm(vels, spectrum)
+    sigma, fwhm_points, peak_velocity, vels_for_interp, spec_for_interp = \
+        find_hwhm(vels, spectrum, interp_factor)
 
     maxpos = np.argmax(spec_for_interp)
-    maxvel = vels_for_interp[maxpos]
+    # maxvel = vels_for_interp[maxpos]
     maxval = spectrum.max()
 
     # Define a Gaussian with this width
-    hwhm_gauss = models.Gaussian1D(amplitude=maxval, mean=maxvel,
+    hwhm_gauss = models.Gaussian1D(amplitude=maxval, mean=peak_velocity,
                                    stddev=sigma)
 
     low_mask = vels_for_interp < fwhm_points[0]
@@ -303,7 +313,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1):
         param_stderrs = np.array([delta_sigma, delta_v_peak, delta_f_wings,
                                   delta_sigma_wing, delta_a, delta_kappa])
 
-    params = np.array([sigma, maxvel, f_wings, sigma_wing, asymm_val, kappa])
+    params = np.array([sigma, peak_velocity, f_wings, sigma_wing, asymm_val, kappa])
     param_names = ["sigma", "v_peak", "f_wings", "sigma_wing", "asymm",
                    "kappa"]
 
