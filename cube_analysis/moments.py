@@ -1,7 +1,6 @@
 
 from spectral_cube import SpectralCube
 from spectral_cube.lower_dimensional_structures import Projection
-from spectral_cube.cube_utils import average_beams
 import numpy as np
 import astropy.units as u
 from astropy.io import fits
@@ -149,7 +148,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     maxima = cube.max(axis=0)
     if freq is not None:
         if hasattr(cube, 'beams'):
-            peak_temps = maxima * average_beams(cube.beams).jtok(freq)
+            peak_temps = maxima * cube.beams.largest_beam().jtok(freq)
         elif hasattr(cube, 'beam'):
             peak_temps = maxima * cube.beam.jtok(freq)
         else:
