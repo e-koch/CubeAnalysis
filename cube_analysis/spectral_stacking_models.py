@@ -110,6 +110,13 @@ def fit_gaussian(vels, spectrum, p0=None):
     return parvals, parerrs, cov, parnames, g_HI
 
 
+def reorder_spectra(vels, spectrum):
+    spec_for_interp = spectrum if np.diff(vels[:2])[0] > 0 else spectrum[::-1]
+    vels_for_interp = vels if np.diff(vels[:2])[0] > 0 else vels[::-1]
+
+    return spec_for_interp, vels_for_interp
+
+
 def find_hwhm(vels, spectrum, interp_factor=10):
     '''
     Return the equivalent Gaussian sigma based on the HWHM positions.
@@ -119,8 +126,7 @@ def find_hwhm(vels, spectrum, interp_factor=10):
 
     # Model the spectrum with a spline
     # x values must be increasing for the spline, so flip if needed.
-    spec_for_interp = spectrum if np.diff(vels[:2])[0] > 0 else spectrum[::-1]
-    vels_for_interp = vels if np.diff(vels[:2])[0] > 0 else vels[::-1]
+    spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
 
     interp1 = InterpolatedUnivariateSpline(vels_for_interp,
                                            spec_for_interp - halfmax, k=3)
@@ -145,45 +151,23 @@ def find_hwhm(vels, spectrum, interp_factor=10):
     upsamp_spec = interp1(upsamp_vels)
     peak_velocity = upsamp_vels[np.argmax(upsamp_spec)]
 
-    return sigma, fwhm_points, peak_velocity, vels_for_interp, spec_for_interp
+    return sigma, fwhm_points, peak_velocity
 
 
-def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
-             interp_factor=10):
-    '''
-    Scale the inner Gaussian to the HWHM of the profile.
+def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
+                 nbeams=1, interp_factor=10):
 
-    Extracts the equivalent inner gaussian width, the fraction of flux in the
-    wings, the equivalent width of the wings, and the asymmetry of the wings or
-    profile. Each of these is defined in Stilp et al. (2013).
-    https://ui.adsabs.harvard.edu/#abs/2013ApJ...765..136S/abstract
+    spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
 
-    One additional parameter has been added:
+    sigma = hwhm_gauss.stddev.value
+    peak_velocity = hwhm_gauss.mean.value
+    maxval = hwhm_gauss.amplitude.value
 
-    kappa = Sum_i (Data_i - Gauss_i) / Sum_i (Gauss_i)
-    for i within the FWHM.
+    maxpos = np.abs(vels_for_interp - peak_velocity).argmin()
 
-    kappa measures the kurtic behaviour of the peak. If negative, the peak
-    is leptokurtic (more peaked). If positive, the peak is playkurtic
-    (less peaked).
-
-    Parameters
-    ----------
-    asymm : str, optional
-        'full' to calculate asymmetry of whole profile, or 'wings' to
-        only calculate it in the wings.
-    '''
-
-    sigma, fwhm_points, peak_velocity, vels_for_interp, spec_for_interp = \
-        find_hwhm(vels, spectrum, interp_factor)
-
-    maxpos = np.argmax(spec_for_interp)
-    # maxvel = vels_for_interp[maxpos]
-    maxval = spectrum.max()
-
-    # Define a Gaussian with this width
-    hwhm_gauss = models.Gaussian1D(amplitude=maxval, mean=peak_velocity,
-                                   stddev=sigma)
+    hwhm_factor = np.sqrt(2 * np.log(2))
+    fwhm_points = [hwhm_gauss.mean - hwhm_gauss.stddev * hwhm_factor,
+                   hwhm_gauss.mean + hwhm_gauss.stddev * hwhm_factor]
 
     low_mask = vels_for_interp < fwhm_points[0]
     high_mask = vels_for_interp > fwhm_points[1]
@@ -205,7 +189,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
                         zip(spec_for_interp[high_mask],
                             vels_for_interp[high_mask])]))
 
-    sigma_wing = np.sqrt(var_wing / tail_flux_excess)
+    sigma_wing = np.sqrt(np.abs(var_wing / tail_flux_excess))
 
     if asymm == "full":
         neg_iter = range(maxpos - 1, -1, -1)
@@ -295,14 +279,16 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
                         (a_term2 / tail_flux_excess)**2)
 
         kap_term1_denom = \
-                np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
-                        zip(spec_for_interp[fwhm_mask],
-                            vels_for_interp[fwhm_mask])])
+            np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
+                    zip(spec_for_interp[fwhm_mask],
+                        vels_for_interp[fwhm_mask])])
+
         kap_term1_numer = np.sum([delta_S + g_uncert(vel) for vel in
                                  vels_for_interp[fwhm_mask]])
 
         kap_term2_numer = \
             np.sum([g_uncert(vel) for vel in vels_for_interp[fwhm_mask]])
+
         kap_term2_denom = \
             np.sum([hwhm_gauss(vel) for vel in vels_for_interp[fwhm_mask]])
 
@@ -312,12 +298,180 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
 
         param_stderrs = np.array([delta_sigma, delta_v_peak, delta_f_wings,
                                   delta_sigma_wing, delta_a, delta_kappa])
+    else:
+        param_stderrs = np.array([0.] * 6)
 
-    params = np.array([sigma, peak_velocity, f_wings, sigma_wing, asymm_val, kappa])
+    params = np.array([sigma, peak_velocity, f_wings, sigma_wing, asymm_val,
+                       kappa])
     param_names = ["sigma", "v_peak", "f_wings", "sigma_wing", "asymm",
                    "kappa"]
 
     return params, param_stderrs, param_names, hwhm_gauss
+
+
+def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
+             interp_factor=10, niters=None):
+    '''
+    Scale the inner Gaussian to the HWHM of the profile.
+
+    Extracts the equivalent inner gaussian width, the fraction of flux in the
+    wings, the equivalent width of the wings, and the asymmetry of the wings or
+    profile. Each of these is defined in Stilp et al. (2013).
+    https://ui.adsabs.harvard.edu/#abs/2013ApJ...765..136S/abstract
+
+    One additional parameter has been added:
+
+    kappa = Sum_i (Data_i - Gauss_i) / Sum_i (Gauss_i)
+    for i within the FWHM.
+
+    kappa measures the kurtic behaviour of the peak. If negative, the peak
+    is leptokurtic (more peaked). If positive, the peak is playkurtic
+    (less peaked).
+
+    Parameters
+    ----------
+    asymm : str, optional
+        'full' to calculate asymmetry of whole profile, or 'wings' to
+        only calculate it in the wings.
+    '''
+
+    sigma, fwhm_points, peak_velocity = \
+        find_hwhm(vels, spectrum, interp_factor)
+
+    maxval = spectrum.max()
+
+    # Define a Gaussian with this width
+    hwhm_gauss = models.Gaussian1D(amplitude=maxval, mean=peak_velocity,
+                                   stddev=sigma)
+
+    # If niter is given, use gauss_uncert_sampler to get the parameter
+    # uncertainties
+
+    params, param_stderrs, param_names, hwhm_gauss = \
+        _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm=asymm,
+                     sigma_noise=sigma_noise if niters is None else None,
+                     nbeams=nbeams, interp_factor=interp_factor)
+
+    if niters is not None:
+        param_stderrs = \
+            gauss_uncert_sampler(vels, spectrum, hwhm_gauss, params,
+                                 int(niters), asymm,
+                                 sigma_noise=sigma_noise * np.sqrt(nbeams),
+                                 interp_factor=interp_factor)
+
+    return params, param_stderrs, param_names, hwhm_gauss
+
+
+def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
+                         sigma_noise=None, interp_factor=10,
+                         ci=[15, 85], verbose=False):
+    '''
+    Calculate the uncertainty in the HWHM model parameters due to the Gaussian
+    profile assumptions.
+
+    The uncertainty is estimated by:
+
+    1) Re-sampling the spectrum within sigma_noise
+    2) Changing the peak and width of the model within the expected
+       uncertainty.
+
+
+    '''
+
+    chan_width = np.abs(np.diff(vels[:2])[0])
+
+    # Error in profile width
+    delta_sigma = chan_width / (2 * np.sqrt(2 * np.log(2)))
+
+    # Error in peak velocity should approach channel width ASSUMING the
+    # shuffling is optimized
+    delta_v_peak = chan_width / 2.
+
+    param_values = np.empty((niters, 6))
+
+    spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
+
+    interp1 = InterpolatedUnivariateSpline(vels_for_interp,
+                                           spec_for_interp, k=3)
+    interp_factor = float(interp_factor)
+    chan_size = np.diff(vels_for_interp[:2])[0] / interp_factor
+    upsamp_vels = np.linspace(vels_for_interp.min(),
+                              vels_for_interp.max() + 0.9 * chan_size,
+                              vels_for_interp.size * interp_factor)
+    upsamp_spectrum = interp1(upsamp_vels)
+    # Increase the noise per point in the up-sampled data
+    upsamp_sigma_noise = sigma_noise * np.sqrt(interp_factor)
+
+    for i in range(niters):
+
+        # Re-sample spectrum values if sigma_noise is given
+        if sigma_noise is not None:
+            spec_resamp = upsamp_spectrum + \
+                np.random.normal(0, sigma_noise,
+                                 size=upsamp_spectrum.shape)
+        else:
+            spec_resamp = upsamp_spectrum
+
+        new_peak = upsamp_spectrum.max()
+        new_mean = model.mean + np.random.normal(0, delta_v_peak)
+        new_sigma = model.stddev + np.random.normal(0, delta_sigma)
+        # new_sigma, fwhm_points_, new_mean = \
+        #     find_hwhm(vels, spectrum, interp_factor)
+
+        pert_model = models.Gaussian1D(amplitude=new_peak, mean=new_mean,
+                                       stddev=new_sigma)
+
+        pert_params = _hwhm_fitter(upsamp_vels, spec_resamp, pert_model,
+                                   asymm=asymm,
+                                   sigma_noise=None,
+                                   interp_factor=interp_factor)[0]
+        param_values[i] = pert_params
+
+    lower_lim = params - np.nanpercentile(param_values, ci[0], axis=0)
+    upper_lim = np.nanpercentile(param_values, ci[1], axis=0) - params
+
+    # Insert the assumed known errors in sigma and vpeak
+    lower_lim[0] = upper_lim[0] = delta_sigma
+    lower_lim[1] = upper_lim[1] = delta_v_peak
+
+    if verbose:
+        from astropy.visualization import hist
+        import matplotlib.pyplot as p
+        p.subplot(321)
+        _ = hist(param_values[:, 0])
+        p.axvline(params[0], color='g')
+        p.axvline(params[0] - lower_lim[0], color='r')
+        p.axvline(params[0] + upper_lim[0], color='r')
+        p.subplot(322)
+        _ = hist(param_values[:, 1])
+        p.axvline(params[1], color='g')
+        p.axvline(params[1] - lower_lim[1], color='r')
+        p.axvline(params[1] + upper_lim[1], color='r')
+        p.subplot(323)
+        _ = hist(param_values[:, 2])
+        p.axvline(params[2], color='g')
+        p.axvline(params[2] - lower_lim[2], color='r')
+        p.axvline(params[2] + upper_lim[2], color='r')
+        p.subplot(324)
+        _ = hist(param_values[:, 3])
+        p.axvline(params[3], color='g')
+        p.axvline(params[3] - lower_lim[3], color='r')
+        p.axvline(params[3] + upper_lim[3], color='r')
+        p.subplot(325)
+        _ = hist(param_values[:, 4])
+        p.axvline(params[4], color='g')
+        p.axvline(params[4] - lower_lim[4], color='r')
+        p.axvline(params[4] + upper_lim[4], color='r')
+        p.subplot(326)
+        _ = hist(param_values[:, 5])
+        p.axvline(params[5], color='g')
+        p.axvline(params[5] - lower_lim[5], color='r')
+        p.axvline(params[5] + upper_lim[5], color='r')
+        p.draw()
+        raw_input("?")
+        p.clf()
+
+    return np.vstack([lower_lim, upper_lim])
 
 
 def gauss_uncert(vel, model, chan_width, nbeams, sigma_noise):
