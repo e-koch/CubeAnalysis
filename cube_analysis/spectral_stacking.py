@@ -26,7 +26,8 @@ def total_profile(cube, spatial_mask=None, how='slice'):
 
 
 def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
-                    pa_bounds=None, num_cores=1, verbose=False, how='slice'):
+                    pa_bounds=None, num_cores=1, verbose=False, how='slice',
+                    return_masks=False):
     '''
     Radially stack spectra.
     '''
@@ -38,6 +39,9 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
     nbins = np.int(np.floor(max_radius / dr))
     inneredge = np.linspace(0, max_radius - dr, nbins)
     outeredge = np.linspace(dr, max_radius, nbins)
+
+    if return_masks:
+        masks = []
 
     if pa_bounds is not None:
         # Check if they are angles
@@ -74,6 +78,9 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
 
         spec_mask = np.logical_and(rad_mask, pa_mask)
 
+        if return_masks:
+            masks.append(spec_mask)
+
         stacked_spectra[ctr] = \
             total_profile(cube, spec_mask,  # num_cores=num_cores,
                           how=how)
@@ -82,11 +89,15 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
 
     bin_centers = (inneredge + dr / 2.).to(dr.unit)
 
+    if return_masks:
+        return bin_centers, stacked_spectra, num_pixels, masks
+
     return bin_centers, stacked_spectra, num_pixels
 
 
 def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
-                        max_val=None, verbose=False, how='slice'):
+                        max_val=None, verbose=False, how='slice',
+                        return_masks=False):
     '''
     Stack spectra in a cube based on the values in a given 2D image. For
     example, give the peak temperature array to stack based on percentile of
@@ -123,6 +134,9 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
     stacked_spectra = np.zeros((inneredge.size, cube.shape[0])) * cube.unit
     num_pixels = np.zeros(inneredge.size)
 
+    if return_masks:
+        masks = []
+
     for ctr, (p0, p1) in enumerate(zip(inneredge,
                                        outeredge)):
 
@@ -131,10 +145,15 @@ def percentile_stacking(cube, proj, dperc=5, num_cores=1, min_val=None,
 
         mask = np.logical_and(proj >= p0, proj < p1)
 
-        stacked_spectra[ctr] = total_profile(cube, mask,  # num_cores=num_cores,
-                                             how=how)
-        num_pixels[ctr] = spec_mask.sum()
+        if return_masks:
+            masks.append(mask)
+
+        stacked_spectra[ctr] = total_profile(cube, mask, how=how)
+        num_pixels[ctr] = mask.sum()
 
     bin_centers = inneredge + dperc / 2.
+
+    if return_masks:
+        return bin_centers, stacked_spectra, num_pixels, masks
 
     return bin_centers, stacked_spectra, num_pixels
