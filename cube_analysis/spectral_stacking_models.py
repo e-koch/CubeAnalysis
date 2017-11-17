@@ -280,7 +280,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
             # delta_a = asymm_val * len(spectrum) * delta_S * \
             #     np.sqrt((2 / (asymm_val * np.sum(spectrum)))**2 +
             #             (np.sum(spectrum))**-2)
-            delta_a = asymm_val * delta_S * \
+            delta_a = np.abs(asymm_val) * delta_S * \
                 np.sqrt(((vels_for_interp < peak_velocity).sum() / left_sum)**2 +
                         ((vels_for_interp > peak_velocity).sum() / right_sum)**2)
         else:
@@ -301,7 +301,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
                 np.sum([delta_S + g_uncert(vel) for vel in
                         vels_for_interp[gt_peak]]) / tail_flux_excess_high
 
-            delta_a = delta_f_v_lt_vpeak + delta_f_v_gt_vpeak
+            delta_a = np.abs(delta_f_v_lt_vpeak) + np.abs(delta_f_v_gt_vpeak)
 
         kap_term1_denom = \
             np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
@@ -323,6 +323,9 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
 
         param_stderrs = np.array([delta_sigma, delta_v_peak, delta_f_wings,
                                   delta_sigma_wing, delta_a, delta_kappa])
+
+        print(param_stderrs)
+
     else:
         param_stderrs = np.array([0.] * 6)
 
@@ -377,7 +380,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
 
     params, param_stderrs, param_names, hwhm_gauss = \
         _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm=asymm,
-                     sigma_noise=sigma_noise if niters is None else None,
+                     sigma_noise=sigma_noise,# if niters is None else None,
                      nbeams=nbeams, interp_factor=interp_factor)
 
     if niters is not None:
@@ -392,7 +395,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
 
 def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
                          sigma_noise=None, interp_factor=10,
-                         ci=[15, 85], verbose=False):
+                         ci=[15, 85], verbose=True):
     '''
     Calculate the uncertainty in the HWHM model parameters due to the Gaussian
     profile assumptions.
@@ -435,7 +438,7 @@ def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
         # Re-sample spectrum values if sigma_noise is given
         if sigma_noise is not None:
             spec_resamp = upsamp_spectrum + \
-                np.random.normal(0, sigma_noise,
+                np.random.normal(0, upsamp_sigma_noise,
                                  size=upsamp_spectrum.shape)
         else:
             spec_resamp = upsamp_spectrum
@@ -461,6 +464,8 @@ def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
     # Insert the assumed known errors in sigma and vpeak
     lower_lim[0] = upper_lim[0] = delta_sigma
     lower_lim[1] = upper_lim[1] = delta_v_peak
+
+    print(lower_lim, upper_lim)
 
     if verbose:
         from astropy.visualization import hist
