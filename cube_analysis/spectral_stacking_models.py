@@ -172,11 +172,14 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
     low_mask = vels_for_interp < fwhm_points[0]
     high_mask = vels_for_interp > fwhm_points[1]
 
-    tail_flux_excess = \
-        (np.sum([spec - hwhm_gauss(vel) for spec, vel in
-                 zip(spec_for_interp[low_mask], vels_for_interp[low_mask])]) +
-         np.sum([spec - hwhm_gauss(vel) for spec, vel in
-                 zip(spec_for_interp[high_mask], vels_for_interp[high_mask])]))
+    tail_flux_excess_low = \
+        np.sum([spec - hwhm_gauss(vel) for spec, vel in
+                zip(spec_for_interp[low_mask], vels_for_interp[low_mask])])
+    tail_flux_excess_high = \
+        np.sum([spec - hwhm_gauss(vel) for spec, vel in
+                zip(spec_for_interp[low_mask], vels_for_interp[low_mask])])
+
+    tail_flux_excess = tail_flux_excess_low + tail_flux_excess_high
 
     # Calculate fraction in the wings
     f_wings = tail_flux_excess / np.sum(spectrum)
@@ -192,19 +195,28 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
     sigma_wing = np.sqrt(np.abs(var_wing / tail_flux_excess))
 
     if asymm == "full":
-        neg_iter = range(maxpos - 1, -1, -1)
-        pos_iter = range(maxpos + 1, len(vels))
-        asymm_val = np.sum([np.sqrt((spec_for_interp[vel_l] -
-                                     spec_for_interp[vel_u])**2)
-                            for vel_l, vel_u in zip(neg_iter, pos_iter)]) / \
-            np.sum(spectrum)
+        # neg_iter = range(maxpos - 1, -1, -1)
+        # pos_iter = range(maxpos + 1, len(vels))
+        # asymm_val = np.sum([np.sqrt((spec_for_interp[vel_l] -
+        #                              spec_for_interp[vel_u])**2)
+        #                     for vel_l, vel_u in zip(neg_iter, pos_iter)]) / \
+        #     np.sum(spectrum)
+        left_sum = np.sum(spec_for_interp[vels_for_interp < peak_velocity])
+        right_sum = np.sum(spec_for_interp[vels_for_interp > peak_velocity])
+        asymm_val = (left_sum - right_sum) / np.sum(spec_for_interp)
     elif asymm == 'wings':
-        neg_iter = np.where(vels < fwhm_points[0])[0]
-        pos_iter = np.where(vels > fwhm_points[1])[0]
-        asymm_val = np.sum([np.sqrt((spec_for_interp[vel_l] -
-                                     spec_for_interp[vel_u])**2)
-                            for vel_l, vel_u in zip(neg_iter, pos_iter)]) / \
-            tail_flux_excess
+        # neg_iter = np.where(vels_for_interp < fwhm_points[0])[0]
+        # pos_iter = np.where(vels_for_interp > fwhm_points[1])[0]
+        # asymm_val = np.sum([np.sqrt((spec_for_interp[vel_l] -
+        #                              spec_for_interp[vel_u])**2)
+        #                     for vel_l, vel_u in zip(neg_iter, pos_iter)]) / \
+        #     tail_flux_excess
+        left_sum = np.sum(spec_for_interp[vels_for_interp < fwhm_points[0]] -
+                          hwhm_gauss(vels_for_interp[vels_for_interp < fwhm_points[0]]))
+        right_sum = np.sum(spec_for_interp[vels_for_interp > fwhm_points[1]] -
+                           hwhm_gauss(vels_for_interp[vels_for_interp > fwhm_points[1]]))
+        asymm_val = (left_sum - right_sum) / tail_flux_excess
+
     else:
         raise TypeError("asymm must be 'full' or 'wings'.")
 
@@ -265,18 +277,31 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
                     (sigw_term2 / tail_flux_excess)**2)
 
         if asymm == "full":
-            delta_a = asymm_val * len(spectrum) * delta_S * \
-                np.sqrt((2 / (asymm_val * np.sum(spectrum)))**2 +
-                        (np.sum(spectrum))**-2)
+            # delta_a = asymm_val * len(spectrum) * delta_S * \
+            #     np.sqrt((2 / (asymm_val * np.sum(spectrum)))**2 +
+            #             (np.sum(spectrum))**-2)
+            delta_a = asymm_val * delta_S * \
+                np.sqrt(((vels_for_interp < peak_velocity).sum() / left_sum)**2 +
+                        ((vels_for_interp > peak_velocity).sum() / right_sum)**2)
         else:
 
-            a_term2 = wing_term1
+            # a_term2 = wing_term1
+            # n_vals = len(neg_iter) + len(pos_iter)
+            # delta_a = asymm_val * \
+            #     np.sqrt((2 * n_vals * delta_S / (asymm_val * tail_flux_excess))**2 +
+            #             (a_term2 / tail_flux_excess)**2)
 
-            n_vals = len(neg_iter) + len(pos_iter)
+            lt_peak = vels_for_interp < peak_velocity
+            gt_peak = vels_for_interp > peak_velocity
 
-            delta_a = asymm_val * \
-                np.sqrt((2 * n_vals * delta_S / (asymm_val * tail_flux_excess))**2 +
-                        (a_term2 / tail_flux_excess)**2)
+            delta_f_v_lt_vpeak = \
+                np.sum([delta_S + g_uncert(vel) for vel in
+                        vels_for_interp[lt_peak]]) / tail_flux_excess_low
+            delta_f_v_gt_vpeak = \
+                np.sum([delta_S + g_uncert(vel) for vel in
+                        vels_for_interp[gt_peak]]) / tail_flux_excess_high
+
+            delta_a = delta_f_v_lt_vpeak + delta_f_v_gt_vpeak
 
         kap_term1_denom = \
             np.sum([(spec - hwhm_gauss(vel)) for spec, vel in
@@ -318,6 +343,9 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
     wings, the equivalent width of the wings, and the asymmetry of the wings or
     profile. Each of these is defined in Stilp et al. (2013).
     https://ui.adsabs.harvard.edu/#abs/2013ApJ...765..136S/abstract
+
+    The asymmetry parameter is redefined to be the difference of the flux
+    above and below the peak velocity divided by the total flux.
 
     One additional parameter has been added:
 
