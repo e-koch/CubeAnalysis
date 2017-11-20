@@ -393,7 +393,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
 
 def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
                          sigma_noise=None, interp_factor=10,
-                         ci=[15, 85], verbose=True):
+                         ci=[15, 85], verbose=False):
     '''
     Calculate the uncertainty in the HWHM model parameters due to the Gaussian
     profile assumptions.
