@@ -324,8 +324,6 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
         param_stderrs = np.array([delta_sigma, delta_v_peak, delta_f_wings,
                                   delta_sigma_wing, delta_a, delta_kappa])
 
-        print(param_stderrs)
-
     else:
         param_stderrs = np.array([0.] * 6)
 
@@ -380,7 +378,7 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
 
     params, param_stderrs, param_names, hwhm_gauss = \
         _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm=asymm,
-                     sigma_noise=sigma_noise,# if niters is None else None,
+                     sigma_noise=sigma_noise if niters is None else None,
                      nbeams=nbeams, interp_factor=interp_factor)
 
     if niters is not None:
@@ -464,8 +462,6 @@ def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
     # Insert the assumed known errors in sigma and vpeak
     lower_lim[0] = upper_lim[0] = delta_sigma
     lower_lim[1] = upper_lim[1] = delta_v_peak
-
-    print(lower_lim, upper_lim)
 
     if verbose:
         from astropy.visualization import hist
