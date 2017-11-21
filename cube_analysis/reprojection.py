@@ -156,7 +156,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     output_fits.close()
 
     # If there was a table of beams, be sure to append this.
-    if common_beam and isinstance(beams, list):
+    if not common_beam and isinstance(beams, list):
             if verbose:
                 log.info("Appending beam table to FITS file.")
             from spectral_cube.cube_utils import beams_to_bintable
