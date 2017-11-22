@@ -13,6 +13,9 @@ from functools import partial
 def fit_2gaussian(vels, spectrum):
     '''
     Fit a 2 Gaussian model with the means tied.
+
+    .. todo:: Allow passing sigma for weighting in the fit.
+
     '''
 
     max_vel = vels[np.argmax(spectrum)]
@@ -60,9 +63,18 @@ def fit_2gaussian(vels, spectrum):
     return parvals, parerrs, cov, parnames, g_HI
 
 
-def fit_gaussian(vels, spectrum, p0=None):
+def fit_gaussian(vels, spectrum, p0=None, sigma=None):
     '''
     Fit a Gaussian model.
+
+    Parameters
+    ----------
+    sigma : `~astropy.units.Quantity`, optional
+        Pass a single value to be used for all points or an array of values
+        equal to the size of vels and spectrum. These are used to define
+        weights in the fit, and the weights as defined as 1 / sigma, as is
+        used in `~scipy.optimize.curve_fit`.
+
     '''
 
     if p0 is None:
@@ -74,21 +86,35 @@ def fit_gaussian(vels, spectrum, p0=None):
     else:
         specmax, max_vel, sigma_est = p0
 
+    if sigma is not None:
+        if hasattr(sigma, 'size'):
+            if sigma.size > 1:
+                if sigma.size != vels.size:
+                    raise ValueError("sigma must match the data shape when "
+                                     "multiple values are given.")
+                weights = 1 / np.abs(sigma)
+            else:
+                weights = np.array([np.abs(sigma)] * len(vels))
+        else:
+            weights = np.array([np.abs(sigma)] * len(vels))
+    else:
+        weights = None
+
     # Use this as the narrow estimate, and let the wide guess be 3x
 
-    g_HI_init = models.Gaussian1D(amplitude=specmax, mean=max_vel,
-                                  stddev=sigma_est)
+    g_init = models.Gaussian1D(amplitude=specmax, mean=max_vel,
+                               stddev=sigma_est)
 
     fit_g = fitting.LevMarLSQFitter()
 
-    g_HI = fit_g(g_HI_init, vels, spectrum)
+    g_fit = fit_g(g_init, vels, spectrum, weights=weights)
 
     # The covariance matrix is hidden away... tricksy
     cov = fit_g.fit_info['param_cov']
     if cov is None:
         cov = np.zeros((3, 3)) * np.NaN
-    parnames = g_HI.param_names
-    parvals = g_HI.parameters
+    parnames = g_fit.param_names
+    parvals = g_fit.parameters
 
     # Sometimes the width is negative
     parvals[-1] = np.abs(parvals[-1])
@@ -107,7 +133,7 @@ def fit_gaussian(vels, spectrum, p0=None):
     else:
         parerrs = [np.NaN] * len(parnames)
 
-    return parvals, parerrs, cov, parnames, g_HI
+    return parvals, parerrs, cov, parnames, g_fit
 
 
 def reorder_spectra(vels, spectrum):
