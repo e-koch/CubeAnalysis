@@ -92,9 +92,11 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
                 if sigma.size != vels.size:
                     raise ValueError("sigma must match the data shape when "
                                      "multiple values are given.")
-                weights = 1 / np.abs(sigma)
+                weights = 1 / np.abs(sigma.value)
             else:
-                weights = 1 / np.array([np.abs(sigma)] * len(vels))
+                # A quantity will still have a `size` attribute with one
+                # element
+                weights = 1 / np.array([np.abs(sigma.value)] * len(vels))
         else:
             weights = 1 / np.array([np.abs(sigma)] * len(vels))
     else:
@@ -120,11 +122,14 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
     parvals[-1] = np.abs(parvals[-1])
 
     if cov is not None:
-        chan_width = np.diff(vels[:2])[0]
+        chan_width = np.diff(vels[:2])[0].value
         parerrs = []
-        for name, var in zip(parnames, np.diag(cov)):
+        for name, var, val in zip(parnames, np.diag(cov), parvals):
+            # print(name, var, val)
             if "mean" in name or "stddev" in name:
                 # Add the finite channel width in quadrature
+                # print(var, chan_width)
+                # print(np.diag(cov))
                 stderr = np.sqrt(var + (0.5 * chan_width)**2)
             else:
                 stderr = np.sqrt(var)
