@@ -94,9 +94,9 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
                                      "multiple values are given.")
                 weights = 1 / np.abs(sigma)
             else:
-                weights = np.array([np.abs(sigma)] * len(vels))
+                weights = 1 / np.array([np.abs(sigma)] * len(vels))
         else:
-            weights = np.array([np.abs(sigma)] * len(vels))
+            weights = 1 / np.array([np.abs(sigma)] * len(vels))
     else:
         weights = None
 
