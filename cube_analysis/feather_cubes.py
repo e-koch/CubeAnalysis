@@ -129,10 +129,14 @@ def _feather(args):
 
 
 def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
-                         frequency=1.42040575177 * u.GHz,
-                         verbose=True, num_cores=1, chunk=100):
+                         restfreq=1.42040575177 * u.GHz,
+                         verbose=True, num_cores=1, chunk=100,
+                         weights=1.):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
+
+    **Assumes velocity axes use the radio convention!**
+
     '''
 
     # Ensure the spectral axes are the same.
@@ -154,12 +158,16 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
     else:
         lowresfwhm = lowresfwhm.to(u.arcsec)
 
+    freq_axis = cube_hi.with_spectral_unit(u.Hz, velocity_convention='radio',
+                                           rest_value=restfreq).spectral_axis
+
     for i, chunk_chans in enumerate(chunked_channels):
 
         log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
         changen = ((chan, cube_hi[chan], cube_lo[chan],
-                    LAS, lowresfwhm, frequency) for chan in chunk_chans)
+                    LAS, lowresfwhm, freq_axis[chan],
+                    weights) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose,
                           num_jobs=len(chunk_chans)) as map:
@@ -179,15 +187,14 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
 
 def _compare(args):
 
-    chan, plane_hi, plane_lo, LAS, lowresfwhm, freq = args
+    chan, plane_hi, plane_lo, LAS, lowresfwhm, freq, weights = args
 
-    hi_beam = plane_hi.beam
-
-    out = feather_compare(plane_hi.to(u.K, hi_beam.jtok_equiv(freq)).hdu,
+    out = feather_compare(plane_hi.to(u.K, freq=freq).hdu,
                           plane_lo.hdu,
                           return_samples=True, doplot=False,
                           LAS=LAS, SAS=lowresfwhm,
-                          lowresfwhm=lowresfwhm)
+                          lowresfwhm=lowresfwhm,
+                          weights=weights)
 
     return chan, out
 
