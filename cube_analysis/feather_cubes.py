@@ -20,7 +20,7 @@ from .progressbar import _map_context
 def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
                  save_name=None, num_cores=1, chunk=100,
                  restfreq=1.42040575177 * u.GHz,
-                 weights=1.,
+                 weights=None,
                  feather_kwargs={}):
     '''
     Feather two cubes together. The spectral axis of the cubes *must match*.
