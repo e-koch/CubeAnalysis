@@ -19,7 +19,8 @@ from .progressbar import _map_context
 
 def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
                  save_name=None, num_cores=1, chunk=100,
-                 frequency=1.42040575177 * u.GHz,
+                 restfreq=1.42040575177 * u.GHz,
+                 weights=1.,
                  feather_kwargs={}):
     '''
     Feather two cubes together. The spectral axis of the cubes *must match*.
@@ -46,12 +47,18 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
     num_chans = cube_hi.shape[0]
     chunked_channels = get_channel_chunks(num_chans, chunk)
 
+    freq_axis = cube_hi.with_spectral_unit(u.Hz, velocity_convention='radio',
+                                           rest_value=restfreq).spectral_axis
+
+    if weights is not None:
+        feather_kwargs['weights'] = weights
+
     for i, chunk_chans in enumerate(chunked_channels):
 
         log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
         changen = ((chan, cube_hi[chan:chan + 1], cube_lo[chan:chan + 1],
-                    frequency, feather_kwargs) for chan in chunk_chans)
+                    freq_axis[chan], feather_kwargs) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose,
                           num_jobs=len(chunk_chans)) as map:
@@ -89,23 +96,22 @@ def _feather(args):
     # TODO: When Jy/beam is supported in SpectralCube, just let uvcombine
     # match the units. BUT we also need Slice objects to retain a 1 element
     # spectral axis!
-    if plane_hi.unit == u.K:
-        if hasattr(plane_hi, 'beams'):
-            beam = plane_hi.beams[0]
-        else:
-            beam = plane_hi.beam
+    if plane_hi.unit != plane_lo.unit:
+        if plane_hi.unit == u.K:
+            if hasattr(plane_hi, 'beams'):
+                beam = plane_hi.beams[0]
+            else:
+                beam = plane_hi.beam
 
-        plane_hi = plane_hi.to(u.Jy, plane_hi.beam.jtok_equiv(freq))
-    plane_hi._unit = u.Jy / u.beam
+            plane_hi = plane_hi.to(u.Jy / u.beam, plane_hi.beam.jtok_equiv(freq))
 
-    if plane_lo.unit == u.K:
-        if hasattr(plane_lo, 'beams'):
-            beam = plane_lo.beams[0]
-        else:
-            beam = plane_lo.beam
+        if plane_lo.unit == u.K:
+            if hasattr(plane_lo, 'beams'):
+                beam = plane_lo.beams[0]
+            else:
+                beam = plane_lo.beam
 
-        plane_lo = plane_lo.to(u.Jy, beam.jtok_equiv(freq))
-    plane_lo._unit = u.Jy / u.beam
+            plane_lo = plane_lo.to(u.Jy / u.beam, beam.jtok_equiv(freq))
 
     if hasattr(plane_hi, 'hdu'):
         plane_hi_hdu = plane_hi.hdu
