@@ -18,6 +18,7 @@ from .spectra_shifter import fourier_shift
 
 
 def cube_registration(cube, target_cube, verbose=True, num_cores=1,
+                      restfreq=1.42040575177 * u.GHz,
                       **kwargs):
     '''
     Use the DFT method in image_registration to find the offset for each
@@ -32,7 +33,11 @@ def cube_registration(cube, target_cube, verbose=True, num_cores=1,
         raise Warning("The spectral axes do not match. Spectrally regrid the "
                       "cubes to be the same before feathering.")
 
-    cubegen = ((i, cube[i], target_cube[i]) for i in xrange(cube.shape[0]))
+    freqs = cube.with_spectral_unit(u.Hz, velocity_convention='radio',
+                                    rest_value=restfreq).spectral_axis
+
+    cubegen = ((i, cube[i], target_cube[i], freqs[i])
+               for i in xrange(cube.shape[0]))
 
     with _map_context(num_cores, verbose=verbose,
                       num_jobs=cube.shape[0]) as map:
@@ -50,7 +55,7 @@ def _register(args):
     Match units, convolve, and regrid, then register the channels.
     '''
 
-    chan, plane, targ_plane = args
+    chan, plane, targ_plane, freq = args
 
     # TODO: Should be using match_flux_units, but the Slices don't have
     # WCS spectral information anymore. That's an issue whenever the
@@ -72,12 +77,10 @@ def _register(args):
 
     # Hard-wired for my HI VLA to SD comparisons right now.
 
-    hi_freq = 1.42040575177 * u.GHz
-
     if plane.unit == u.K and targ_plane.unit != u.K:
-        targ_plane = targ_plane.to(u.K, targ_plane.beam.jtok_equiv(hi_freq))
+        targ_plane = targ_plane.to(u.K, targ_plane.beam.jtok_equiv(freq))
     elif plane.unit != u.K and targ_plane.unit == u.K:
-        plane = plane.to(u.K, plane.beam.jtok_equiv(hi_freq))
+        plane = plane.to(u.K, plane.beam.jtok_equiv(freq))
 
     plane_shape = plane.shape
     targ_plane_shape = targ_plane.shape
