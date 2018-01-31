@@ -57,7 +57,9 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
             log.info("Spectral interpolation")
 
         if isinstance(cube, VaryingResolutionSpectralCube):
-            cube = cube.convolve_to(largest_beam(cube.beams))
+            log.info("This is a VaryingResolutionSpectralCube. Convolving to a"
+                     " common beam before performing spectral interpolation.")
+            cube = cube.convolve_to(common_beam(cube.beams))
 
         cube = cube.spectral_interpolate(targ_cube.spectral_axis)
 
