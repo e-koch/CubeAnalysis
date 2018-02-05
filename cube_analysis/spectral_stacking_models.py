@@ -208,12 +208,26 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
                 zip(spec_for_interp[low_mask], vels_for_interp[low_mask])])
     tail_flux_excess_high = \
         np.sum([spec - hwhm_gauss(vel) for spec, vel in
-                zip(spec_for_interp[low_mask], vels_for_interp[low_mask])])
+                zip(spec_for_interp[high_mask], vels_for_interp[high_mask])])
 
     tail_flux_excess = tail_flux_excess_low + tail_flux_excess_high
 
     # Calculate fraction in the wings
     f_wings = tail_flux_excess / np.sum(spectrum)
+
+    # Calculate the symmetric and asymmetric line wing fractions
+    # Symmetric is defined as the same ratio as the full f_wing, but only
+    # computed for whichever side has less flux.
+    # The asymmetric component is the difference b/w the full f_wing and
+    # the symmetric f_wing
+    # if tail_flux_excess_low > tail_flux_excess_high:
+    #     f_wings_symm = tail_flux_excess_high / \
+    #         np.sum(spec_for_interp[vels_for_interp > fwhm_points[1]])
+    # else:
+    #     f_wings_symm = tail_flux_excess_low / \
+    #         np.sum(spec_for_interp[vels_for_interp < fwhm_points[0]])
+
+    # f_wings_asymm = f_wings - f_wings_symm
 
     # Equivalent sigma^2 of the wings
     var_wing = (np.sum([vel**2 * (spec - hwhm_gauss(vel)) for spec, vel in
@@ -561,3 +575,53 @@ def gauss_uncert(vel, model, chan_width, nbeams, sigma_noise):
     term3 = nbeams * (sigma_noise / amp)**2
 
     return mod_val * np.sqrt(term1 + term2 + term3)
+
+
+def find_linewing_asymm(spec_n, spec_s, v_peak=None, sigma=None):
+    '''
+    Find the symmetric and asymmetric line wing fraction from stacked profiles
+    split into two halves of some region (i.e., N/S halves of a galaxy,
+    different sides of an outflow, etc.). Defined with respect to a Gaussian
+    model for the central peak of the stacked profiles
+    '''
+
+    vels = spec_n.spectral_axis.value
+
+    tot_spec = spec_n + spec_s
+
+    spec_n_r = reorder_spectra(vels, spec_n)[0]
+    spec_s_r = reorder_spectra(vels, spec_s)[0]
+    tot_spec, vels = reorder_spectra(vels, tot_spec)
+
+    # Fit w/o finding errors
+    parvals_hwhm, parerrs_hwhm, parnames_hwhm, hwhm_gauss = \
+        fit_hwhm(vels, tot_spec.value,
+                 niters=None, interp_factor=2.)
+
+    hwhm_factor = np.sqrt(2 * np.log(2))
+    fwhm_points = [hwhm_gauss.mean - hwhm_gauss.stddev * hwhm_factor,
+                   hwhm_gauss.mean + hwhm_gauss.stddev * hwhm_factor]
+
+    low_mask = vels < fwhm_points[0]
+    high_mask = vels > fwhm_points[1]
+
+    blue_excess = np.sum((spec_s_r - spec_n_r)[low_mask])
+    red_excess = np.sum((spec_n_r - spec_s_r)[high_mask])
+
+    tail_flux_excess_low = \
+        np.sum([spec - hwhm_gauss(vel) for spec, vel in
+                zip(tot_spec[low_mask], vels[low_mask])])
+    tail_flux_excess_high = \
+        np.sum([spec - hwhm_gauss(vel) for spec, vel in
+                zip(tot_spec[high_mask], vels[high_mask])])
+
+    tail_flux_excess = tail_flux_excess_low + tail_flux_excess_high
+
+    # Calculate fraction in the wings
+    f_wings = tail_flux_excess / np.sum(tot_spec)
+
+    f_symm = (tail_flux_excess - blue_excess - red_excess) / np.sum(tot_spec)
+
+    f_asymm = (blue_excess + red_excess) / np.sum(tot_spec)
+
+    return f_wings, f_symm, f_asymm
