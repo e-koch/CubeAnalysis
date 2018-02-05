@@ -577,7 +577,10 @@ def gauss_uncert(vel, model, chan_width, nbeams, sigma_noise):
     return mod_val * np.sqrt(term1 + term2 + term3)
 
 
-def find_linewing_asymm(spec_n, spec_s, v_peak=None, sigma=None):
+def find_linewing_asymm(vels, spec_n, spec_s, interp_factor=2,
+                        niters=None, ci=[15, 85],
+                        sigma_noise_s=None,
+                        sigma_noise_n=None):
     '''
     Find the symmetric and asymmetric line wing fraction from stacked profiles
     split into two halves of some region (i.e., N/S halves of a galaxy,
@@ -585,17 +588,16 @@ def find_linewing_asymm(spec_n, spec_s, v_peak=None, sigma=None):
     model for the central peak of the stacked profiles
     '''
 
-    vels = spec_n.spectral_axis.value
+    vels_orig = vels.copy()
+
+    spec_n_r = reorder_spectra(vels.copy(), spec_n)[0]
+    spec_s_r, vels = reorder_spectra(vels_orig, spec_s)
 
     tot_spec = spec_n + spec_s
 
-    spec_n_r = reorder_spectra(vels, spec_n)[0]
-    spec_s_r = reorder_spectra(vels, spec_s)[0]
-    tot_spec, vels = reorder_spectra(vels, tot_spec)
-
     # Fit w/o finding errors
     parvals_hwhm, parerrs_hwhm, parnames_hwhm, hwhm_gauss = \
-        fit_hwhm(vels, tot_spec.value,
+        fit_hwhm(vels, tot_spec,
                  niters=None, interp_factor=2.)
 
     hwhm_factor = np.sqrt(2 * np.log(2))
@@ -624,4 +626,82 @@ def find_linewing_asymm(spec_n, spec_s, v_peak=None, sigma=None):
 
     f_asymm = (blue_excess + red_excess) / np.sum(tot_spec)
 
-    return f_wings, f_symm, f_asymm
+    params = np.array([f_wings, f_symm, f_asymm])
+
+    # Now calculate uncertainty
+    chan_width = np.abs(np.diff(vels[:2])[0])
+
+    # Error in profile width
+    delta_sigma = chan_width / (2 * np.sqrt(2 * np.log(2)))
+
+    # Error in peak velocity should approach channel width ASSUMING the
+    # shuffling is optimized
+    delta_v_peak = chan_width / 2.
+
+    if niters is not None:
+
+        param_values = np.empty((niters, 3))
+
+        for i in range(niters):
+
+            # Re-sample spectrum values if sigma_noise is given
+            if sigma_noise_n is not None:
+                spec_n_resamp = spec_n_r + \
+                    np.random.normal(0, sigma_noise_n,
+                                     size=spec_n_r.shape)
+            else:
+                spec_n_resamp = spec_n_r
+
+            if sigma_noise_s is not None:
+                spec_s_resamp = spec_s_r + \
+                    np.random.normal(0, sigma_noise_s,
+                                     size=spec_s_r.shape)
+            else:
+                spec_s_resamp = spec_s_r
+
+            tot_spec_resamp = spec_n_resamp + spec_s_resamp
+
+            new_peak = tot_spec_resamp.max()
+            new_mean = hwhm_gauss.mean + np.random.normal(0, delta_v_peak)
+            new_sigma = hwhm_gauss.stddev + np.random.normal(0, delta_sigma)
+
+            pert_model = models.Gaussian1D(amplitude=new_peak, mean=new_mean,
+                                           stddev=new_sigma)
+
+            fwhm_points = [pert_model.mean - pert_model.stddev * hwhm_factor,
+                           pert_model.mean + pert_model.stddev * hwhm_factor]
+
+            low_mask = vels < fwhm_points[0]
+            high_mask = vels > fwhm_points[1]
+
+            blue_excess_pert = np.sum((spec_s_resamp - spec_n_resamp)[low_mask])
+            red_excess_pert = np.sum((spec_n_resamp - spec_s_resamp)[high_mask])
+
+            tail_flux_excess_low_pert = \
+                np.sum([spec - pert_model(vel) for spec, vel in
+                        zip(tot_spec_resamp[low_mask], vels[low_mask])])
+            tail_flux_excess_high_pert = \
+                np.sum([spec - pert_model(vel) for spec, vel in
+                        zip(tot_spec_resamp[high_mask], vels[high_mask])])
+
+            tail_flux_excess_pert = tail_flux_excess_low_pert + \
+                tail_flux_excess_high_pert
+
+            # Calculate fraction in the wings
+            f_wings_pert = tail_flux_excess_pert / np.sum(tot_spec_resamp)
+
+            f_symm_pert = (tail_flux_excess_pert - blue_excess_pert -
+                           red_excess_pert) / np.sum(tot_spec_resamp)
+
+            f_asymm_pert = (blue_excess_pert + red_excess_pert) / \
+                np.sum(tot_spec_resamp)
+
+            param_values[i] = np.array([f_wings_pert, f_symm_pert, f_asymm_pert])
+
+        lower_lim = params - np.nanpercentile(param_values, ci[0], axis=0)
+        upper_lim = np.nanpercentile(param_values, ci[1], axis=0) - params
+
+        return params, lower_lim, upper_lim
+
+    else:
+        return params
