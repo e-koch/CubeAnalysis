@@ -588,12 +588,10 @@ def find_linewing_asymm(vels, spec_n, spec_s, interp_factor=2,
     model for the central peak of the stacked profiles
     '''
 
-    vels_orig = vels.copy()
-
     spec_n_r = reorder_spectra(vels.copy(), spec_n)[0]
-    spec_s_r, vels = reorder_spectra(vels_orig, spec_s)
+    spec_s_r, vels = reorder_spectra(vels.copy(), spec_s)
 
-    tot_spec = spec_n + spec_s
+    tot_spec = spec_n_r + spec_s_r
 
     # Fit w/o finding errors
     parvals_hwhm, parerrs_hwhm, parnames_hwhm, hwhm_gauss = \
