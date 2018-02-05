@@ -3,8 +3,11 @@ import numpy as np
 import numpy.testing as npt
 from astropy.modeling import models
 
-from ..spectral_stacking_models import (fit_gaussian, fit_2gaussian, fit_hwhm)
+from ..spectral_stacking_models import (fit_gaussian, fit_2gaussian, fit_hwhm,
+                                        find_linewing_asymm)
 
+
+np.random.seed(347895209)
 
 def gauss_with_noise(vels, amp, mean, stddev, noise_level,
                      return_models=False):
@@ -264,3 +267,64 @@ def test_hwhm_model_asymmwings():
         if name == 'sig_wing':
             continue
         assert_between(act, val, low, up)
+
+
+def test_symm_asymm_fwing():
+    '''
+    Use above asymmetric setup.
+    '''
+    vels = np.linspace(-1, 1, 100)
+
+    model, gauss, lor = \
+        gauss_with_wings_noise(vels, 1., 0.0, 0.1, 0.0, return_models=True,
+                               asymm=-0.85)
+
+    noisy_model = \
+        gauss_with_wings_noise(vels, 1., 0.0, 0.1, 0.01,
+                               asymm=-0.85)
+    s_model = model
+    n_model = model[::-1]
+
+    tot_model = n_model + s_model
+
+    params_clean = find_linewing_asymm(vels, n_model, s_model)
+
+    s_model_noisy = noisy_model
+    n_model_noisy = noisy_model[::-1]
+
+    params, low_lim, up_lim = \
+        find_linewing_asymm(vels, n_model_noisy, s_model_noisy,
+                            niters=100,
+                            sigma_noise_n=0.01,
+                            sigma_noise_s=0.01)
+
+    high_mask = vels > 0.0 + 0.1 * np.sqrt(2 * np.log(2))
+    low_mask = vels < 0.0 - 0.1 * np.sqrt(2 * np.log(2))
+
+    # We added the model twice, so multiple gauss by 2
+    f_wings = (np.sum(tot_model[low_mask] - 2 * gauss[low_mask]) +
+               np.sum(tot_model[high_mask] - 2 * gauss[high_mask])) / \
+        np.sum(tot_model)
+
+    blue_excess = np.sum(s_model[low_mask] - n_model[low_mask])
+    red_excess = np.sum(n_model[high_mask] - s_model[high_mask])
+
+    f_asymm = (blue_excess + red_excess) / np.sum(tot_model)
+
+    f_symm = f_wings - f_asymm
+
+    npt.assert_allclose(f_wings, params_clean[0], atol=0.005)
+
+    assert_between(f_wings, params[0], low_lim[0], up_lim[0])
+
+    npt.assert_allclose(f_symm, params_clean[1], atol=0.005)
+
+    assert_between(f_symm, params[1], low_lim[1], up_lim[1])
+
+    npt.assert_allclose(f_asymm, params_clean[2], atol=0.005)
+
+    # Errors seem to be a bit more asymmetric for f_asymm. Allow
+    # a larger range
+    avg_sig = 0.5 * ((params[2] - low_lim[2]) + (up_lim[2] - params[2]))
+    assert_between(f_asymm, params[2], low_lim[2] - 0.5 * avg_sig,
+                   up_lim[2] + 0.5 * avg_sig)
