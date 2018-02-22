@@ -248,7 +248,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
         #     np.sum(spectrum)
         left_sum = np.sum(spec_for_interp[vels_for_interp < peak_velocity])
         right_sum = np.sum(spec_for_interp[vels_for_interp > peak_velocity])
-        asymm_val = (left_sum - right_sum) / np.sum(spec_for_interp)
+        asymm_val = (right_sum - left_sum) / np.sum(spec_for_interp)
     elif asymm == 'wings':
         # neg_iter = np.where(vels_for_interp < fwhm_points[0])[0]
         # pos_iter = np.where(vels_for_interp > fwhm_points[1])[0]
@@ -260,7 +260,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
                           hwhm_gauss(vels_for_interp[vels_for_interp < fwhm_points[0]]))
         right_sum = np.sum(spec_for_interp[vels_for_interp > fwhm_points[1]] -
                            hwhm_gauss(vels_for_interp[vels_for_interp > fwhm_points[1]]))
-        asymm_val = (left_sum - right_sum) / tail_flux_excess
+        asymm_val = (right_sum - left_sum) / tail_flux_excess
 
     else:
         raise TypeError("asymm must be 'full' or 'wings'.")
