@@ -7,7 +7,7 @@ import astropy.wcs as wcs
 from galaxies import Galaxy
 
 
-def vcirc(r, *pars):
+def vcirc_brandt(r, *pars):
     '''
     Fit Eq. 5 from Meidt+08 (Eq. 1 Faber & Gallagher 79)
     '''
@@ -19,7 +19,49 @@ def vcirc(r, *pars):
     return numer / denom
 
 
-def generate_vrot_model(table_name, model=vcirc, verbose=False):
+def dvdR_brandt(r, *pars):
+    '''
+    Analytical derivative of the Brandt curve.
+    '''
+    n, vmax, rmax = pars
+
+    r_rat = r / rmax
+
+    term1 = (vmax * r_rat) * r_rat**(n - 1) / \
+        np.power((1 / 3.) + (2 / 3.) * (r_rat**n), (3 / (2 * n)) + 1)
+
+    term2 = vcirc_brandt(r, *pars) / r
+
+    return - term1 + term2
+
+
+def oortA_brandt(r, *pars):
+    '''
+    Oort A coefficient for local shear.
+    '''
+
+    return 0.5 * ((vcirc_brandt(r, *pars) / r) - dvdR_brandt(r, *pars))
+
+
+def oortB_brandt(r, *pars):
+    '''
+    Oort B coefficient
+    '''
+
+    return - 0.5 * ((vcirc_brandt(r, *pars) / r) + dvdR_brandt(r, *pars))
+
+
+def epifreq_brandt(r, *pars):
+    '''
+    Epicyclic frequency based on Brandt curve.
+    '''
+
+    Omega = (vcirc_brandt(r, *pars) / r)
+
+    return np.sqrt(2 * Omega * (Omega - dvdR_brandt(r, *pars)))
+
+
+def generate_vrot_model(table_name, model=vcirc_brandt, verbose=False):
     '''
     Parameters
     ----------
@@ -43,7 +85,7 @@ def generate_vrot_model(table_name, model=vcirc, verbose=False):
     return pars, pcov
 
 
-def return_smooth_model(table_name, header, gal, model=vcirc):
+def return_smooth_model(table_name, header, gal, model=vcirc_brandt):
 
     assert isinstance(gal, Galaxy)
 
@@ -61,7 +103,7 @@ def return_smooth_model(table_name, header, gal, model=vcirc):
     mod_pars[2] *= scale * dist_scale
 
     # Put into m/s.
-    smooth_model = (vcirc(radii, *mod_pars) * 1000.) * np.cos(pas) * \
+    smooth_model = (model(radii, *mod_pars) * 1000.) * np.cos(pas) * \
         np.sin(gal.inclination).value
 
     # Shift by Vsys (m / s)
