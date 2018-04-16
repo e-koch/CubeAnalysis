@@ -185,7 +185,8 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
             dtype = cube[:, 0, 0].dtype
 
         create_huge_fits(save_name, new_header, dtype=dtype,
-                         return_hdu=False, fill_nan=not is_mask)
+                         return_hdu=False, fill_nan=not is_mask,
+                         verbose=verbose)
 
     if return_spectra:
         all_shifted_spectra = []
