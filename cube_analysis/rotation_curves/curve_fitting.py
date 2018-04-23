@@ -27,7 +27,7 @@ def dvdR_brandt(r, *pars):
 
     r_rat = r / rmax
 
-    term1 = (vmax * r_rat) * r_rat**(n - 1) / \
+    term1 = (vmax * r_rat / rmax) * r_rat**(n - 1) / \
         np.power((1 / 3.) + (2 / 3.) * (r_rat**n), (3 / (2 * n)) + 1)
 
     term2 = vcirc_brandt(r, *pars) / r
