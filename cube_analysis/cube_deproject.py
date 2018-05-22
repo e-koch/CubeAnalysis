@@ -16,7 +16,7 @@ from .progressbar import _map_context
 from .io_utils import create_huge_fits
 
 
-def deproject(image, header, gal, conv_circ_beam=False):
+def deproject(image, header, gal, conv_circ_beam=False, inc_correction=True):
     '''
     Calculate the deprojection angles for the given image and reflect
     the changes in the header. Optionally smooth prior to the deprojection
@@ -41,8 +41,10 @@ def deproject(image, header, gal, conv_circ_beam=False):
     deproj_mask = nd.zoom(rot_mask, (1., 1. / np.cos(inc).value))
 
     # Correct values by cos(inc)
-    deproj = deproj * np.cos(inc)
-    deproj[deproj_mask < 1e-3] = np.NaN
+    if inc_correction:
+        deproj = deproj * np.cos(inc)
+
+    deproj[deproj_mask < 1e-5] = np.NaN
 
     return deproj
 
