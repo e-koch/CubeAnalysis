@@ -5,7 +5,6 @@ from spectral_cube.cube_utils import largest_beam
 import os
 from astropy import log
 from astropy.convolution import Box1DKernel
-from signal_id import Noise
 from scipy import ndimage as nd
 from astropy.wcs.utils import proj_plane_pixel_scales
 import skimage.morphology as mo
@@ -15,6 +14,12 @@ from operator import itemgetter
 from astropy.stats import mad_std
 from scipy.signal import medfilt
 import matplotlib.pyplot as p
+
+try:
+    from signal_id import Noise
+    SIGNAL_ID_INSTALL = True
+except ImportError:
+    SIGNAL_ID_INSTALL = False
 
 from .io_utils import save_to_huge_fits
 from .progressbar import ProgressBar
@@ -158,6 +163,9 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
         smooth_cube = cube
 
     if noise_map is None:
+        if not SIGNAL_ID_INSTALL:
+            raise ImportError("signal-id needs to be installed for noise map"
+                              " estimation.")
         log.info("No noise map given. Using Noise to estimate the spatial"
                  " noise.")
         noise = Noise(smooth_cube)
@@ -354,8 +362,6 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
             raw_input("Next spectrum?")
             p.clf()
 
-    # initial_mask = mask.copy()
-
     # Now set the spatial connectivity requirements.
     if spatial_kernel is "beam":
 
@@ -420,7 +426,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
         return []
 
     sequences = []
-    for k, g in groupby(enumerate(good_posns), lambda (i, x): i - x):
+    for k, g in groupby(enumerate(good_posns), lambda i, x: i - x):
         sequences.append(map(itemgetter(1), g))
 
     # Check length and peak. Require a minimum of 3 pixels above the noise

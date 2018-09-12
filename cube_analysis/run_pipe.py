@@ -3,8 +3,8 @@ import os
 from astropy import log
 from datetime import datetime
 
-from masking import pb_masking, signal_masking, common_beam_convolve
-from moments import make_moments
+from .masking import pb_masking, signal_masking, common_beam_convolve
+from .moments import make_moments
 
 
 def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
