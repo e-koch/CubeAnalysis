@@ -309,7 +309,7 @@ def get_channel_chunks(num_chans, chunk):
     channels = np.arange(num_chans)
     chunked_channels = \
         np.array_split(channels,
-                       [chunk * i for i in xrange(num_chans / chunk)])
+                       [chunk * i for i in range(num_chans // chunk)])
     if chunked_channels[-1].size == 0:
         chunked_channels = chunked_channels[:-1]
     if chunked_channels[0].size == 0:

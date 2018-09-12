@@ -40,7 +40,7 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
     if verbose:
         iterat = ProgressBar(shape[min_axis])
     else:
-        iterat = xrange(shape[min_axis])
+        iterat = range(shape[min_axis])
 
     output_fits = fits.StreamingHDU(filename, header)
 
@@ -71,7 +71,7 @@ def save_to_huge_fits(filename, cube, verbose=True, overwrite=False,
 
     output_fits = fits.open(filename, mode='update')
 
-    for chan in xrange(cube.shape[0]):
+    for chan in range(cube.shape[0]):
         plane = cube[chan]
         if hasattr(plane, 'unit'):
             plane = plane.value
