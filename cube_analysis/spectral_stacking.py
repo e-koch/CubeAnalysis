@@ -2,8 +2,12 @@
 import numpy as np
 import astropy.units as u
 from astropy.coordinates import Angle
-from itertools import izip
 from astropy import log
+
+import sys
+if sys.version_info < (3,0):
+    from itertools import izip as zip
+
 
 from .progressbar import _map_context
 from .feather_cubes import get_channel_chunks

@@ -5,7 +5,10 @@ from spectral_cube.lower_dimensional_structures import OneDSpectrum
 import astropy.units as u
 from astropy import log
 import numpy as np
-from itertools import izip
+
+import sys
+if sys.version_info < (3,0):
+    from itertools import izip as zip
 
 from .io_utils import create_huge_fits
 from .progressbar import _map_context, ProgressBar
@@ -202,7 +205,7 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
 
         gen = [(y, x, cube.unmasked_data[:, y, x], shift, pad_edges, pad_size)
                for y, x, shift in
-               izip(xy_posns[0][chunk], xy_posns[1][chunk], pix_shifts[chunk])]
+               zip(xy_posns[0][chunk], xy_posns[1][chunk], pix_shifts[chunk])]
 
         with _map_context(num_cores, verbose=verbose,
                           num_jobs=len(chunk)) as map:

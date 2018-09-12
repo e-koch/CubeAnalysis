@@ -1,1 +1,3 @@
-from cube_fitting import cube_fitter
+from .cube_fitting import cube_fitter
+from .line_forward_model import convolve_and_sample
+from .discrete_sampler import sample_at_channels, gauss_model_discrete

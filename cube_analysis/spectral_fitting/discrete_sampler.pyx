@@ -33,7 +33,7 @@ def gauss_weighted_avg(double a, double b, double amp, double stddev,
 @cython.boundscheck(False)
 @cython.nonecheck(False)
 @cython.wraparound(False)
-def gauss_model_chanweight(np.ndarray[np.float64_t, ndim=1] vels, double amp,
+def gauss_model_discrete(np.ndarray[np.float64_t, ndim=1] vels, double amp,
                            double stddev, double mean):
 
     # Assume the channels are equally spaced.
