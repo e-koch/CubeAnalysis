@@ -6,7 +6,6 @@ import astropy.units as u
 from astropy.io import fits
 from astropy import log
 from astropy.convolution import Gaussian1DKernel
-from itertools import izip
 import os
 import glob
 
@@ -62,15 +61,17 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
 
         if in_memory:
             gener = [(cube[:, y, x], kern)
-                     for y, x in izip(y_posn, x_posn)]
+                     for y, x in zip(y_posn, x_posn)]
         else:
             gener = ((cube[:, y, x], kern)
-                     for y, x in izip(y_posn, x_posn))
+                     for y, x in zip(y_posn, x_posn))
 
         with _map_context(num_cores, verbose=verbose) as map:
             output = map(_peak_velocity, gener)
 
-        for out, y, x in izip(output, y_posn, x_posn):
+        del gener
+
+        for out, y, x in zip(output, y_posn, x_posn):
             peakvels[y, x] = out
 
     # peakvels[peakvels == 0.0 * u.m / u.s] = np.NaN * u.m / u.s
@@ -83,7 +84,8 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
 
 def make_moments(cube_name, mask_name, output_folder, freq=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
-                 in_memory=False, smooth_size=None):
+                 in_memory=False, smooth_size=None,
+                 how='slice'):
     '''
     Create the moment arrays.
     '''
@@ -98,12 +100,12 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     # Now create the moment 1 and save it. Make a linewidth one too.
 
-    moment0 = cube.moment0()
+    moment0 = cube.moment0(how=how)
     moment0_name = "{}.mom0.fits".format(cube_name.rstrip(".fits"))
     moment0.write(os.path.join(output_folder, moment0_name),
                   overwrite=True)
 
-    moment1 = cube.moment1().astype(np.float32)
+    moment1 = cube.moment1(how=how).astype(np.float32)
     moment1[moment1 < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
     moment1[moment1 > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
 
@@ -112,13 +114,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     moment1.write(os.path.join(moment1_name),
                   overwrite=True)
 
-    linewidth = cube.linewidth_sigma()
+    linewidth = cube.linewidth_sigma(how=how)
     lwidth_name = "{}.lwidth.fits".format(cube_name.rstrip(".fits"))
     linewidth.write(os.path.join(lwidth_name),
                     overwrite=True)
 
     # Skewness
-    mom3 = cube.moment(order=3, axis=0)
+    mom3 = cube.moment(order=3, axis=0, how=how)
 
     # Normalize third moment by the linewidth to get the skewness
     skew = mom3 / linewidth ** 3
@@ -127,7 +129,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
                overwrite=True)
 
     # Kurtosis: Uncorrected
-    mom4 = cube.moment(order=4, axis=0)
+    mom4 = cube.moment(order=4, axis=0, how=how)
     # Normalize third moment by the linewidth to get the skewness
     # And subtract 3 to correct for Gaussian kurtosis of 3.
     kurt = (mom4 / linewidth ** 4) - 3
@@ -136,7 +138,9 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
                overwrite=True)
 
     # Peak temperature map. And convert to K
-    maxima = cube.max(axis=0)
+    if in_memory:
+        cube.allow_huge_operations = True
+    maxima = cube.max(axis=0, how=how)
     if freq is not None:
         if hasattr(cube, 'beams'):
             peak_temps = maxima * cube.beams.largest_beam().jtok(freq)
