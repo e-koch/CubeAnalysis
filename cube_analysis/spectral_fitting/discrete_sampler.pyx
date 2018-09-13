@@ -74,9 +74,7 @@ def sample_at_channels(np.ndarray[np.float64_t, ndim=1] vels,
         bin_mask = np.logical_and(upsamp_vels >= vel - half_chan_width,
                                   upsamp_vels <= vel + half_chan_width)
 
-        int_bin = values[bin_mask].sum()
-
-        spec[i] = int_bin / chan_width
+        spec[i] = values[bin_mask].mean()
 
         i += 1
 
