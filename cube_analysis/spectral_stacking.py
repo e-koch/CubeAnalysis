@@ -5,7 +5,7 @@ from astropy.coordinates import Angle
 from astropy import log
 
 import sys
-if sys.version_info < (3,0):
+if sys.version_info < (3, 0):
     from itertools import izip as zip
 
 
@@ -44,6 +44,8 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
     inneredge = np.linspace(0, max_radius - dr, nbins)
     outeredge = np.linspace(dr, max_radius, nbins)
 
+    valid_mask = cube.mask.include().sum(0) > 0
+
     if return_masks:
         masks = []
 
@@ -81,6 +83,9 @@ def radial_stacking(gal, cube, dr=100 * u.pc, max_radius=8 * u.kpc,
         rad_mask = np.logical_and(radius >= r0, radius < r1)
 
         spec_mask = np.logical_and(rad_mask, pa_mask)
+
+        # Now account for masking in the cube
+        spec_mask = np.logical_and(spec_mask, valid_mask)
 
         if return_masks:
             masks.append(spec_mask)
