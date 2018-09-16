@@ -4,6 +4,7 @@ from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
 from spectral_cube.cube_utils import largest_beam
 import os
 from astropy import log
+import astropy.units as u
 from astropy.convolution import Box1DKernel
 from scipy import ndimage as nd
 from astropy.wcs.utils import proj_plane_pixel_scales
@@ -49,7 +50,8 @@ def pb_masking(cube_name, pb_file, pb_lim, output_folder):
     masked_cube.write(os.path.join(masked_name), overwrite=True)
 
 
-def common_beam_convolve(cube_name, output_folder, is_huge=False):
+def common_beam_convolve(cube_name, output_name, is_huge=False,
+                         **kwargs):
     '''
     Convolve a VaryingResolutionSpectralCube to have a common beam size,
     defined by the largest channel beam.
@@ -62,16 +64,12 @@ def common_beam_convolve(cube_name, output_folder, is_huge=False):
                  "Skipping operation.")
         return
 
-    cube = cube.convolve_to(largest_beam(cube.beams))
-
-    # Remove path to the cube
-    filename = os.path.split(cube_name)[1]
-    save_name = os.path.join(output_folder, filename)
+    cube = cube.convolve_to(cube.beams.common_beam(**kwargs))
 
     if is_huge:
-        save_to_huge_fits(save_name, cube, overwrite=True)
+        save_to_huge_fits(output_name, cube, overwrite=True)
     else:
-        cube.write(save_name, overwrite=True)
+        cube.write(output_name, overwrite=True)
 
 
 def signal_masking(cube_name, output_folder, method='ppv_connectivity',
@@ -144,14 +142,14 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
     # # Want to smooth the mask edges
     mask = cube.mask.include().copy()
 
-    # Set smoothing parameters and # consecutive channels.
-    smooth_chans = int(round_up_to_odd(smooth_chans))
-
     # consecutive channels to be real emission.
     num_chans = min_chan
 
     # Smooth the cube, then create a noise model
     if smooth_chans is not None:
+        # Set smoothing parameters and # consecutive channels.
+        smooth_chans = int(round_up_to_odd(smooth_chans))
+
         if isinstance(cube, VaryingResolutionSpectralCube):
             raise TypeError("The resolution of this cube varies."
                             "Convolve to a common "
@@ -175,8 +173,16 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
         snr = noise.snr.copy()
 
     else:
+        # The noise map needs the same units as the cube
+        if not hasattr(noise_map, 'unit'):
+            raise TypeError("noise_map must be an astropy.units.Quantity.")
+        elif not noise_map.unit.is_equivalent(cube.unit):
+            raise u.UnitsError("noise_map ({0}) must have equivalent unit to "
+                               "the cube ({1})".format(noise_map.unit,
+                                                       cube.unit))
+
         try:
-            snr = cube.filled_data[:] / noise_map
+            snr = (cube.filled_data[:] / noise_map).to(u.dimensionless_unscaled).value
         except Exception as e:
             print(e)
             print("You may have to allow for huge cube operations.")
@@ -235,7 +241,12 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 
     # Now set the spatial connectivity requirements.
     if spatial_kernel is "beam":
-        kernel = cube.beam.as_tophat_kernel(pixscale)
+        if hasattr(cube, 'beams'):
+            kernel = cube.beams.common_beam().as_tophat_kernel(pixscale)
+        elif hasattr(cube, 'beam'):
+            kernel = cube.beam.as_tophat_kernel(pixscale)
+        else:
+            raise AttributeError("cube doesn't have 'beam' or 'beams'?")
         # kernel = Beam(major=0.75 * cube.beam.major,
         #               minor=0.75 * cube.beam.minor,
         #               pa=cube.beam.pa).as_tophat_kernel(pixscale)
@@ -366,7 +377,7 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     if spatial_kernel is "beam":
 
         if hasattr(cube, 'beams'):
-            kernel = largest_beam(cube.beams).as_tophat_kernel(pixscale)
+            kernel = cube.beams.common_beam().as_tophat_kernel(pixscale)
         elif hasattr(cube, 'beam'):
             kernel = cube.beam.as_tophat_kernel(pixscale)
         else:
@@ -426,7 +437,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
         return []
 
     sequences = []
-    for k, g in groupby(enumerate(good_posns), lambda i, x: i - x):
+    for k, g in groupby(enumerate(good_posns), lambda i: i[0] - i[1]):
         sequences.append(map(itemgetter(1), g))
 
     # Check length and peak. Require a minimum of 3 pixels above the noise
