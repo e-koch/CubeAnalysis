@@ -250,4 +250,15 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
             output_fits.close()
 
     if return_spectra:
-        return all_shifted_spectra, out_posns
+        if hasattr(cube, "beams"):
+            beams = cube.beams
+        else:
+            beams = None
+
+        all_shifted_oned_spectra = \
+            [OneDSpectrum(shifted, unit=cube.unit,
+                          wcs=cube[:, 0, 0].wcs,
+                          meta=cube[:, 0, 0].meta, spectral_unit=vel_unit,
+                          beams=beams) for shifted in all_shifted_spectra]
+
+        return all_shifted_oned_spectra, out_posns

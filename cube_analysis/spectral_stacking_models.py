@@ -381,7 +381,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
 
 
 def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
-             interp_factor=10, niters=None):
+             interp_factor=10, niters=None, verbose=False):
     '''
     Scale the inner Gaussian to the HWHM of the profile.
 
@@ -427,18 +427,26 @@ def fit_hwhm(vels, spectrum, asymm='full', sigma_noise=None, nbeams=1,
                      nbeams=nbeams, interp_factor=interp_factor)
 
     if niters is not None:
-        param_stderrs = \
+        if sigma_noise is not None:
+            samp_noise = sigma_noise * np.sqrt(nbeams)
+        else:
+            samp_noise = None
+
+        param_stderrs, samps = \
             gauss_uncert_sampler(vels, spectrum, hwhm_gauss, params,
                                  int(niters), asymm,
-                                 sigma_noise=sigma_noise * np.sqrt(nbeams),
-                                 interp_factor=interp_factor)
+                                 sigma_noise=samp_noise,
+                                 interp_factor=interp_factor,
+                                 verbose=verbose, return_samps=True)
+
+        return params, param_stderrs, param_names, hwhm_gauss, samps
 
     return params, param_stderrs, param_names, hwhm_gauss
 
 
 def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
                          sigma_noise=None, interp_factor=10,
-                         ci=[15, 85], verbose=False):
+                         ci=[15, 85], verbose=False, return_samps=False):
     '''
     Calculate the uncertainty in the HWHM model parameters due to the Gaussian
     profile assumptions.
@@ -454,48 +462,47 @@ def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
 
     chan_width = np.abs(np.diff(vels[:2])[0])
 
-    # Error in profile width
-    delta_sigma = chan_width / (2 * np.sqrt(2 * np.log(2)))
-
     # Error in peak velocity should approach channel width ASSUMING the
-    # shuffling is optimized
-    delta_v_peak = chan_width / 2.
+    # shuffling is optimized.
+    # To make this an approximate Gaussian error, take sigma ~ 0.35 * channel
+    # This assumes that we can confidently determine the peak to within 1
+    # channel, so +/-0.35 * channel is an 'equivalent' Gaussian interval.
+    # This is made more reasonable in that the location of the peak is
+    # also determined by the relative heights of the surrounding channels,
+    # but since an explicity fit is not done, we don't have a great way
+    # of including that information here.
+    delta_v_peak = 0.35 * chan_width
+
+    # Error in profile width
+    # Similar assumptions as for the peak location
+    delta_sigma = 0.35 * chan_width
 
     param_values = np.empty((niters, 6))
-
-    spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
-
-    interp1 = InterpolatedUnivariateSpline(vels_for_interp,
-                                           spec_for_interp, k=3)
-    interp_factor = float(interp_factor)
-    chan_size = np.diff(vels_for_interp[:2])[0] / interp_factor
-    upsamp_vels = np.linspace(vels_for_interp.min(),
-                              vels_for_interp.max() + 0.9 * chan_size,
-                              vels_for_interp.size * interp_factor)
-    upsamp_spectrum = interp1(upsamp_vels)
-    # Increase the noise per point in the up-sampled data
-    upsamp_sigma_noise = sigma_noise * np.sqrt(interp_factor)
 
     for i in range(niters):
 
         # Re-sample spectrum values if sigma_noise is given
         if sigma_noise is not None:
-            spec_resamp = upsamp_spectrum + \
-                np.random.normal(0, upsamp_sigma_noise,
-                                 size=upsamp_spectrum.shape)
+            spec_resamp = spectrum + \
+                np.random.normal(0, sigma_noise,
+                                 size=spectrum.shape)
         else:
-            spec_resamp = upsamp_spectrum
+            spec_resamp = spectrum
 
-        new_peak = upsamp_spectrum.max()
-        new_mean = model.mean + np.random.normal(0, delta_v_peak)
-        new_sigma = model.stddev + np.random.normal(0, delta_sigma)
-        # new_sigma, fwhm_points_, new_mean = \
-        #     find_hwhm(vels, spectrum, interp_factor)
+        new_peak = spec_resamp.max()
+        new_sigma, fwhm_points_, new_mean = \
+            find_hwhm(vels, spec_resamp, interp_factor)
+
+        # Due to the finite bins, there's a limit to how well we know the
+        # mean and sigma. Reflect this uncertainty by sampling for
+        # value of the mean and sigma
+        new_mean = new_mean + np.random.normal(0, delta_v_peak)
+        new_sigma = new_sigma + np.random.normal(0, delta_sigma)
 
         pert_model = models.Gaussian1D(amplitude=new_peak, mean=new_mean,
                                        stddev=new_sigma)
 
-        pert_params = _hwhm_fitter(upsamp_vels, spec_resamp, pert_model,
+        pert_params = _hwhm_fitter(vels, spec_resamp, pert_model,
                                    asymm=asymm,
                                    sigma_noise=None,
                                    interp_factor=interp_factor)[0]
@@ -505,45 +512,54 @@ def gauss_uncert_sampler(vels, spectrum, model, params, niters, asymm,
     upper_lim = np.nanpercentile(param_values, ci[1], axis=0) - params
 
     # Insert the assumed known errors in sigma and vpeak
-    lower_lim[0] = upper_lim[0] = delta_sigma
-    lower_lim[1] = upper_lim[1] = delta_v_peak
+    # lower_lim[0] = upper_lim[0] = delta_sigma
+    # lower_lim[1] = upper_lim[1] = delta_v_peak
 
     if verbose:
         from astropy.visualization import hist
         import matplotlib.pyplot as p
         p.subplot(321)
-        _ = hist(param_values[:, 0])
+        _ = hist(param_values[:, 0], bins='scott')
         p.axvline(params[0], color='g')
         p.axvline(params[0] - lower_lim[0], color='r')
         p.axvline(params[0] + upper_lim[0], color='r')
+        p.xlabel("sigma")
         p.subplot(322)
-        _ = hist(param_values[:, 1])
+        _ = hist(param_values[:, 1], bins='scott')
         p.axvline(params[1], color='g')
-        p.axvline(params[1] - lower_lim[1], color='r')
-        p.axvline(params[1] + upper_lim[1], color='r')
+        # p.axvline(params[1] - lower_lim[1], color='r')
+        # p.axvline(params[1] + upper_lim[1], color='r')
+        p.xlabel("v_peak")
         p.subplot(323)
-        _ = hist(param_values[:, 2])
+        _ = hist(param_values[:, 2], bins='scott')
         p.axvline(params[2], color='g')
         p.axvline(params[2] - lower_lim[2], color='r')
         p.axvline(params[2] + upper_lim[2], color='r')
+        p.xlabel("f_wings")
         p.subplot(324)
-        _ = hist(param_values[:, 3])
+        _ = hist(param_values[:, 3], bins='scott')
         p.axvline(params[3], color='g')
         p.axvline(params[3] - lower_lim[3], color='r')
         p.axvline(params[3] + upper_lim[3], color='r')
+        p.xlabel("sigma_wing")
         p.subplot(325)
-        _ = hist(param_values[:, 4])
+        _ = hist(param_values[:, 4], bins='scott')
         p.axvline(params[4], color='g')
         p.axvline(params[4] - lower_lim[4], color='r')
         p.axvline(params[4] + upper_lim[4], color='r')
+        p.xlabel("asymm")
         p.subplot(326)
-        _ = hist(param_values[:, 5])
+        _ = hist(param_values[:, 5], bins='scott')
         p.axvline(params[5], color='g')
         p.axvline(params[5] - lower_lim[5], color='r')
         p.axvline(params[5] + upper_lim[5], color='r')
+        p.xlabel("kappa")
         p.draw()
         raw_input("?")
         p.clf()
+
+    if return_samps:
+        return np.vstack([lower_lim, upper_lim]), param_values
 
     return np.vstack([lower_lim, upper_lim])
 
