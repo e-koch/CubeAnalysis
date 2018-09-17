@@ -3,6 +3,7 @@ from astropy.io import fits
 from spectral_cube import VaryingResolutionSpectralCube
 from spectral_cube.lower_dimensional_structures import OneDSpectrum
 import astropy.units as u
+from astropy.wcs import WCS
 from astropy import log
 import numpy as np
 
@@ -255,9 +256,20 @@ def cube_shifter(cube, velocity_surface, v0=None, save_shifted=False,
         else:
             beams = None
 
+        # Define a velocity-shifted header for a single spectrum, like
+        # new_header defined above.
+        new_spec_header = cube[:, 0, 0].header.copy()
+
+        new_spec_header["CRVAL1"] = new_header["CRVAL1"]
+
+        if pad_edges:
+            new_spec_header["NAXIS1"] = new_header["NAXIS1"]
+            new_spec_header["CRPIX1"] = new_header["CRPIX1"]
+
         all_shifted_oned_spectra = \
             [OneDSpectrum(shifted, unit=cube.unit,
-                          wcs=cube[:, 0, 0].wcs,
+                          header=new_spec_header,
+                          wcs=WCS(new_spec_header),
                           meta=cube[:, 0, 0].meta, spectral_unit=vel_unit,
                           beams=beams) for shifted in all_shifted_spectra]
 
