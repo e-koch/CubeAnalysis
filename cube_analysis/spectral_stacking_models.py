@@ -7,7 +7,10 @@ import numpy as np
 from astropy.modeling import models, fitting
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.special import erf
+from scipy.optimize import curve_fit
 from functools import partial
+
+from .spectral_fitting import gauss_model_discrete
 
 
 def fit_2gaussian(vels, spectrum):
@@ -63,7 +66,7 @@ def fit_2gaussian(vels, spectrum):
     return parvals, parerrs, cov, parnames, g_HI
 
 
-def fit_gaussian(vels, spectrum, p0=None, sigma=None):
+def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False):
     '''
     Fit a Gaussian model.
 
@@ -77,12 +80,25 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
 
     '''
 
+    if hasattr(vels, 'unit'):
+        vel_unit = vels.unit
+    else:
+        vel_unit = 1.
+
+    if hasattr(vels, 'unit'):
+        spec_unit = spectrum.unit
+    else:
+        spec_unit = 1.
+
     if p0 is None:
         max_vel = vels[np.argmax(spectrum)]
         specmax = spectrum.max()
 
         # Estimate the inner width from the HWHM
         sigma_est = find_hwhm(vels, spectrum)[0]
+
+        p0 = (specmax.value, max_vel.value, sigma_est)
+
     else:
         specmax, max_vel, sigma_est = p0
 
@@ -107,19 +123,39 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
     g_init = models.Gaussian1D(amplitude=specmax, mean=max_vel,
                                stddev=sigma_est)
 
-    fit_g = fitting.LevMarLSQFitter()
+    if use_discrete:
 
-    g_fit = fit_g(g_init, vels, spectrum, weights=weights)
+        # Don't use the astropy fitting for the discrete model
+        # Though the astropy fitter is using something quite similar
+        # to this, anyways.
 
-    # The covariance matrix is hidden away... tricksy
-    cov = fit_g.fit_info['param_cov']
-    if cov is None:
-        cov = np.zeros((3, 3)) * np.NaN
+        out = curve_fit(lambda vels, amp, mean, stddev:
+                        gauss_model_discrete(vels, amp=amp, stddev=stddev,
+                                             mean=mean),
+                        vels, spectrum, p0=p0,
+                        sigma=sigma * np.ones_like(vels),
+                        absolute_sigma=True, maxfev=100000)
+
+        g_fit = models.Gaussian1D(amplitude=out[0][0] * spec_unit,
+                                  mean=out[0][1] * vel_unit,
+                                  stddev=out[0][2] * vel_unit)
+
+        cov = out[1]
+        parerrs = np.sqrt(np.diag(out[1]))
+
+    else:
+
+        fit_g = fitting.LevMarLSQFitter()
+
+        g_fit = fit_g(g_init, vels, spectrum, weights=weights)
+
+        # The covariance matrix is hidden away... tricksy
+        cov = fit_g.fit_info['param_cov']
+        if cov is None:
+            cov = np.zeros((3, 3)) * np.NaN
+
     parnames = g_fit.param_names
     parvals = g_fit.parameters
-
-    # Sometimes the width is negative
-    parvals[-1] = np.abs(parvals[-1])
 
     if cov is not None:
         chan_width = np.diff(vels[:2])[0].value
@@ -130,13 +166,16 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None):
                 # Add the finite channel width in quadrature
                 # print(var, chan_width)
                 # print(np.diag(cov))
-                stderr = np.sqrt(var + (0.5 * chan_width)**2)
+                stderr = np.sqrt(var + (0.35 * chan_width)**2)
             else:
                 stderr = np.sqrt(var)
 
             parerrs.append(stderr)
     else:
         parerrs = [np.NaN] * len(parnames)
+
+    # Sometimes the width is negative
+    parvals[-1] = np.abs(parvals[-1])
 
     return parvals, parerrs, cov, parnames, g_fit
 
@@ -285,15 +324,14 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
         # Error for each value in the profile
         delta_S = sigma_noise * np.sqrt(nbeams)
 
-        # Error in sigma is channel_width / 2 sqrt(2 ln 2), from the uncertainty
-        # on each location at the FWHM having the channel width as an error
         chan_width = np.abs(np.diff(vels[:2])[0])
 
-        delta_sigma = chan_width / (2 * np.sqrt(2 * np.log(2)))
+        # Set to 1-sigma area of a rectangular channel.
+        delta_v_peak = 0.35 * chan_width
 
-        # Error in peak velocity should approach channel width ASSUMING the
-        # shuffling is optimized
-        delta_v_peak = chan_width / 2.
+        # Error in profile width
+        # Similar assumptions as for the peak location
+        delta_sigma = 0.35 * chan_width
 
         g_uncert = partial(gauss_uncert, model=hwhm_gauss,
                            chan_width=chan_width,
@@ -354,7 +392,7 @@ def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
                         vels_for_interp[fwhm_mask])])
 
         kap_term1_numer = np.sum([delta_S + g_uncert(vel) for vel in
-                                 vels_for_interp[fwhm_mask]])
+                                  vels_for_interp[fwhm_mask]])
 
         kap_term2_numer = \
             np.sum([g_uncert(vel) for vel in vels_for_interp[fwhm_mask]])

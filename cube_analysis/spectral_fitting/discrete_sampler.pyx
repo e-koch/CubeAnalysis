@@ -34,10 +34,10 @@ def gauss_weighted_avg(double a, double b, double amp, double stddev,
 @cython.nonecheck(False)
 @cython.wraparound(False)
 def gauss_model_discrete(np.ndarray[np.float64_t, ndim=1] vels, double amp,
-                           double stddev, double mean):
+                         double mean, double stddev):
 
     # Assume the channels are equally spaced.
-    cdef double half_chan_width = (vels[1] - vels[0]) / 2.
+    cdef double half_chan_width = np.abs(vels[1] - vels[0]) / 2.
 
     cdef np.ndarray[np.float64_t, ndim=1] vals = np.zeros_like(vels)
 
