@@ -9,6 +9,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.special import erf
 from scipy.optimize import curve_fit
 from functools import partial
+from astropy.convolution import convolve
 
 from .spectral_fitting import gauss_model_discrete
 
@@ -66,7 +67,8 @@ def fit_2gaussian(vels, spectrum):
     return parvals, parerrs, cov, parnames, g_HI
 
 
-def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False):
+def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False,
+                 kernel=None):
     '''
     Fit a Gaussian model.
 
@@ -129,9 +131,21 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False):
         # Though the astropy fitter is using something quite similar
         # to this, anyways.
 
-        out = curve_fit(lambda vels, amp, mean, stddev:
-                        gauss_model_discrete(vels, amp=amp, stddev=stddev,
-                                             mean=mean),
+        if kernel is not None:
+
+            def spectral_model(vels, amp, mean, stddev):
+
+                model = gauss_model_discrete(vels, amp=amp, stddev=stddev,
+                                             mean=mean)
+                return convolve(model, kernel)
+
+        else:
+            def spectral_model(vels, amp, mean, stddev):
+
+                return gauss_model_discrete(vels, amp=amp, stddev=stddev,
+                                            mean=mean)
+
+        out = curve_fit(spectral_model,
                         vels, spectrum, p0=p0,
                         sigma=sigma * np.ones_like(vels),
                         absolute_sigma=True, maxfev=100000)
