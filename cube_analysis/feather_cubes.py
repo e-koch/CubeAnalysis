@@ -137,7 +137,7 @@ def _feather(args):
 def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
                          restfreq=1.42040575177 * u.GHz,
                          verbose=True, num_cores=1, chunk=100,
-                         weights=1.):
+                         weights=None):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
 
