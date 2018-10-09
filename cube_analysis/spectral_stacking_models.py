@@ -68,7 +68,7 @@ def fit_2gaussian(vels, spectrum):
 
 
 def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False,
-                 kernel=None):
+                 kernel=None, add_chan_width_err=True):
     '''
     Fit a Gaussian model.
 
@@ -176,7 +176,7 @@ def fit_gaussian(vels, spectrum, p0=None, sigma=None, use_discrete=False,
         parerrs = []
         for name, var, val in zip(parnames, np.diag(cov), parvals):
             # print(name, var, val)
-            if "mean" in name or "stddev" in name:
+            if "mean" in name or "stddev" in name and add_chan_width_err:
                 # Add the finite channel width in quadrature
                 # print(var, chan_width)
                 # print(np.diag(cov))
