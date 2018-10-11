@@ -103,7 +103,7 @@ def _feather(args):
             else:
                 beam = plane_hi.beam
 
-            plane_hi = plane_hi.to(u.Jy / u.beam, plane_hi.beam.jtok_equiv(freq))
+            plane_hi = plane_hi.to(u.Jy, plane_hi.beam.jtok_equiv(freq)) / u.beam
 
         if plane_lo.unit == u.K:
             if hasattr(plane_lo, 'beams'):
@@ -111,7 +111,7 @@ def _feather(args):
             else:
                 beam = plane_lo.beam
 
-            plane_lo = plane_lo.to(u.Jy / u.beam, beam.jtok_equiv(freq))
+            plane_lo = plane_lo.to(u.Jy, beam.jtok_equiv(freq)) / u.beam
 
     if hasattr(plane_hi, 'hdu'):
         plane_hi_hdu = plane_hi.hdu
