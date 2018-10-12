@@ -9,6 +9,7 @@ from spectral_cube import SpectralCube
 from uvcombine.uvcombine import feather_simple, feather_compare
 from astropy import log
 import astropy.units as u
+from astropy.io import fits
 
 import numpy as np
 
@@ -39,8 +40,8 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
             raise TypeError("save_name must be given the save the shifted "
                             "cube.")
 
-        output_hdu = create_huge_fits(save_name, cube_hi.header,
-                                      return_hdu=True)
+        create_huge_fits(save_name, cube_hi.header,
+                         return_hdu=False)
     else:
         newcube = np.empty(cube_hi.shape, dtype=cube_hi[:1, 0, 0].dtype)
 
@@ -65,6 +66,9 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
             log.info("Feathering")
             output = map(_feather, changen)
 
+        if save_feather:
+            output_hdu = fits.open(save_name, mode='update')
+
         for chan, shifted_arr in output:
             if save_feather:
                 output_hdu[0].data[chan] = shifted_arr.real
@@ -73,6 +77,7 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
 
         if save_feather:
             output_hdu.flush()
+            output_hdu.close()
 
     if save_feather:
 
