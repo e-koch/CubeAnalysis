@@ -271,22 +271,23 @@ def _totalplanes(args):
 
     chan, plane_hi, plane_lo, freq, mask = args
 
-    if mask is not None:
-        if not plane_hi.wcs.wcs.compare(plane_lo.wcs.wcs):
-            # Reproject the low resolution onto the high
+    if mask is None:
+        mask = (slice(None),) * 2
 
-            plane_lo = plane_lo.reproject(plane_hi.header)
+    if not plane_hi.wcs.wcs.compare(plane_lo.wcs.wcs):
+        # Reproject the low resolution onto the high
 
-        # !! Update to Jy/bm (or equiv) when spectral-cube can handle it
-        total_hi = \
-            np.nansum(plane_hi[mask].to(u.Jy, plane_hi.beam.jtok_equiv(freq)))
-        total_lo = \
-            np.nansum(plane_lo[mask].to(u.Jy, plane_lo.beam.jtok_equiv(freq)))
-    else:
-        total_hi = \
-            np.nansum(plane_hi.to(u.Jy, plane_hi.beam.jtok_equiv(freq)))
-        total_lo = \
-            np.nansum(plane_lo.to(u.Jy, plane_lo.beam.jtok_equiv(freq)))
+        plane_lo = plane_lo.reproject(plane_hi.header)
+
+    # !! Update to Jy/bm (or equiv) when spectral-cube can handle it
+    if not plane_hi.unit.is_equivalent(u.Jy / u.beam):
+        plane_hi = plane_hi.to(u.Jy, plane_hi.beam.jtok_equiv(freq))
+
+    if not plane_lo.unit.is_equivalent(u.Jy / u.beam):
+        plane_lo = plane_lo.to(u.Jy, plane_lo.beam.jtok_equiv(freq))
+
+    total_hi = np.nansum(plane_hi[mask].value) * u.Jy
+    total_lo = np.nansum(plane_lo[mask].value) * u.Jy
 
     # Convert from Jy/beam to actual Jy
     total_hi *= (1 / plane_hi.beam.sr.to(u.deg**2)) * \
