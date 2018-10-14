@@ -26,7 +26,7 @@ def test_discrete_sampler(chan_width_stddev):
 
     disc_samps = sample_at_channels(vels, up_vels, samps)
 
-    gauss_samps = gauss_model_discrete(vels, amp, stddev, mean)
+    gauss_samps = gauss_model_discrete(vels, amp, mean, stddev)
 
     npt.assert_allclose(gauss_samps, disc_samps, atol=5e-3)
 
@@ -47,4 +47,3 @@ def test_gauss_discrete():
     actual = 1. * 5. * np.sqrt(2 * np.pi)
 
     npt.assert_allclose(actual, integ * 200.)
-
