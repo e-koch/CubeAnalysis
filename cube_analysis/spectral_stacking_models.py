@@ -206,16 +206,26 @@ def find_hwhm(vels, spectrum, interp_factor=10):
     Return the equivalent Gaussian sigma based on the HWHM positions.
     '''
 
-    halfmax = spectrum.max() * 0.5
-
     # Model the spectrum with a spline
     # x values must be increasing for the spline, so flip if needed.
     spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
 
     interp1 = InterpolatedUnivariateSpline(vels_for_interp,
+                                           spec_for_interp, k=3)
+
+    # Upsample in velocity to estimate the peak position
+    interp_factor = float(interp_factor)
+    chan_size = np.diff(vels_for_interp[:2])[0] / interp_factor
+    upsamp_vels = np.linspace(vels_for_interp.min(),
+                              vels_for_interp.max() + 0.9 * chan_size,
+                              vels_for_interp.size * interp_factor)
+
+    halfmax = interp1(upsamp_vels).max() * 0.5
+
+    interp2 = InterpolatedUnivariateSpline(vels_for_interp,
                                            spec_for_interp - halfmax, k=3)
 
-    fwhm_points = interp1.roots()
+    fwhm_points = interp2.roots()
     if len(fwhm_points) < 2:
         raise ValueError("Found less than 2 roots!")
     # Only keep the min/max if there are multiple
@@ -226,12 +236,6 @@ def find_hwhm(vels, spectrum, interp_factor=10):
     # Convert to equivalent Gaussian sigma
     sigma = fwhm / np.sqrt(8 * np.log(2))
 
-    # Upsample in velocity to estimate the peak position
-    interp_factor = float(interp_factor)
-    chan_size = np.diff(vels_for_interp[:2])[0] / interp_factor
-    upsamp_vels = np.linspace(vels_for_interp.min(),
-                              vels_for_interp.max() + 0.9 * chan_size,
-                              vels_for_interp.size * interp_factor)
     upsamp_spec = interp1(upsamp_vels)
     peak_velocity = upsamp_vels[np.argmax(upsamp_spec)]
 
