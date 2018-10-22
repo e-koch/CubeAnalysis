@@ -8,7 +8,7 @@ from .moments import make_moments
 
 
 def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
-                 convolve_to_common_beam=False,
+                 convolve_to_common_beam=False, combeam_kwargs={},
                  masking_kwargs={}, moment_kwargs={}):
     '''
     Mask and create moment arrays for a given PPV cube.
@@ -42,7 +42,7 @@ def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
                  " beam. This version will overwrite the PB masked cube. ")
         tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         log.info("Convolving to a common beam at {}".format(tstamp))
-        common_beam_convolve(cube_name_pbmask, output_folder)
+        common_beam_convolve(cube_name_pbmask, output_folder, **combeam_kwargs)
 
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log.info("Starting signal masking at {}".format(tstamp))
