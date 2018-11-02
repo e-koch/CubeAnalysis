@@ -32,10 +32,14 @@ def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
         log.info("No PB file given. No PB masking applied.")
         cube_name_pbmask = cube_name
     else:
-        pb_masking(cube_name, pb_file, pb_lim, output_folder)
         cube_name_pbmask = \
             "{0}.pbcov_gt_{1}_masked.fits".format(cube_name.rstrip(".fits"),
                                                   pb_lim)
+
+        if os.path.exists(cube_name_pbmask):
+            log.info("PB masked cube already exists")
+        else:
+            pb_masking(cube_name, pb_file, pb_lim, output_folder)
 
     if convolve_to_common_beam:
         log.info("Convolving to a common beam size, defined by the largest"
