@@ -85,7 +85,7 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
 def make_moments(cube_name, mask_name, output_folder, freq=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
                  in_memory=False, smooth_size=None,
-                 how='slice'):
+                 how='slice', make_peakvels=True):
     '''
     Create the moment arrays.
     '''
@@ -154,14 +154,16 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     peaktemps_name = "{}.peaktemps.fits".format(cube_name.rstrip(".fits"))
     peak_temps.write(peaktemps_name, overwrite=True)
 
-    peakvels = find_peakvelocity(cube, source_mask, chunk_size=chunk_size,
-                                 smooth_size=smooth_size, in_memory=in_memory,
-                                 num_cores=num_cores, verbose=verbose)
+    if make_peakvels:
+        peakvels = find_peakvelocity(cube, source_mask, chunk_size=chunk_size,
+                                     smooth_size=smooth_size,
+                                     in_memory=in_memory,
+                                     num_cores=num_cores, verbose=verbose)
 
-    peakvels = peakvels.astype(np.float32)
-    peakvels.header["BITPIX"] = -32
-    peakvels_name = "{}.peakvels.fits".format(cube_name.rstrip(".fits"))
-    peakvels.write(peakvels_name, overwrite=True)
+        peakvels = peakvels.astype(np.float32)
+        peakvels.header["BITPIX"] = -32
+        peakvels_name = "{}.peakvels.fits".format(cube_name.rstrip(".fits"))
+        peakvels.write(peakvels_name, overwrite=True)
 
 
 def find_moment_names(path):
