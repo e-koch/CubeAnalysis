@@ -118,17 +118,17 @@ def _feather(args):
 
             plane_lo = plane_lo.to(u.Jy, beam.jtok_equiv(freq)) / u.beam
 
-    if hasattr(plane_hi, 'hdu'):
-        plane_hi_hdu = plane_hi.hdu
-    else:
+    if hasattr(plane_hi, 'beams'):
         plane_hi_hdu = plane_hi.hdulist[0]
         plane_hi_hdu.header.update(plane_hi.beams[0].to_header_keywords())
-
-    if hasattr(plane_lo, 'hdu'):
-        plane_lo_hdu = plane_lo.hdu
     else:
+        plane_hi_hdu = plane_hi.hdu
+
+    if hasattr(plane_lo, 'beams'):
         plane_lo_hdu = plane_lo.hdulist[0]
         plane_lo_hdu.header.update(plane_lo.beams[0].to_header_keywords())
+    else:
+        plane_lo_hdu = plane_lo.hdu
 
     feathered = feather_simple(plane_hi_hdu, plane_lo_hdu, **kwargs)
 
