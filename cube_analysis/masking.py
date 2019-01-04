@@ -453,10 +453,13 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
     # Create chunks of the positions
     yposn_chunks = np.array_split(posns[0],
                                   [chunk * i for i in
-                                   range(len(posns[0]) / chunk)])
+                                   range(1,
+                                         int(np.ceil(len(posns[0]) / chunk)))])
+
     xposn_chunks = np.array_split(posns[1],
                                   [chunk * i for i in
-                                   range(len(posns[0]) / chunk)])
+                                   range(1,
+                                         int(np.ceil(len(posns[0]) / chunk)))])
 
     for k in range(len(yposn_chunks)):
         log.info("On {0} of {1}".format(k, len(yposn_chunks) + 1))
@@ -627,7 +630,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
 
     sequences = []
     for k, g in groupby(enumerate(good_posns), lambda i: i[0] - i[1]):
-        sequences.append(map(itemgetter(1), g))
+        sequences.append(list(map(itemgetter(1), g)))
 
     # Check length and peak. Require a minimum of 3 pixels above the noise
     # to grow from.
