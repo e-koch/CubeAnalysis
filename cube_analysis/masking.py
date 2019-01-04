@@ -5,7 +5,7 @@ from spectral_cube.cube_utils import largest_beam
 import os
 from astropy import log
 import astropy.units as u
-from astropy.convolution import Box1DKernel
+from astropy.convolution import Box1DKernel, convolve
 from scipy import ndimage as nd
 from astropy.wcs.utils import proj_plane_pixel_scales
 import skimage.morphology as mo
@@ -22,35 +22,83 @@ try:
 except ImportError:
     SIGNAL_ID_INSTALL = False
 
-from .io_utils import save_to_huge_fits
+from .io_utils import save_to_huge_fits, create_huge_fits
 from .progressbar import ProgressBar
 
 
-def pb_masking(cube_name, pb_file, pb_lim, output_folder):
+def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True):
     '''
     Use the PB coverage map to mask the cleaned cube.
     '''
 
     cube = SpectralCube.read(cube_name)
-    pbcov = fits.open(pb_file)[0]
+    pbcov = fits.open(pb_file, mode='denywrite')[0]
 
     if (pb_lim <= 0) or (pb_lim >= 1):
         raise ValueError("pb_lim most be between 0 and 1.")
 
-    masked_cube = cube.with_mask(pbcov.data > pb_lim)
+    # Assume that the pbcov is constant across channels when a cube is
+    # given
+    if len(pbcov.shape) == 3:
+        pb_slice = (slice(0, 1), slice(None), slice(None))
+    elif len(pbcov.shape) == 2:
+        pb_slice = (slice(None), slice(None))
+    else:
+        raise ValueError("pb_file must be a 2D or 3D array.")
 
-    masked_cube = masked_cube.minimal_subcube()
+    pbcov_plane = pbcov.data[pb_slice].squeeze()
+    if pbcov_plane.shape != cube.shape[1:]:
+        # Try slicing down the pbcov to the minimal shape (cut-out empty
+        # regions).
+        pbcov_plane = pbcov_plane[nd.find_objects(pbcov_plane > 0)[0]]
+        assert pbcov_plane.shape == cube.shape[1:]
+
+    masked_cube = cube.with_mask(pbcov_plane > pb_lim)
 
     masked_name =  \
         "{0}.pbcov_gt_{1}_masked.fits".format(cube_name.rstrip(".fits"),
                                               pb_lim)
 
-    # TODO: Make option for plane-by-plane write out for really large cubes.
+    if is_huge:
+        # Set out the shape from the first couple of channels
 
-    masked_cube.write(os.path.join(masked_name), overwrite=True)
+        min_shape = masked_cube[:2].minimal_subcube().shape
+
+        # Create the FITS file, then write out per plane
+        new_header = masked_cube.header.copy()
+        new_header['NAXIS2'] = min_shape[1]
+        new_header['NAXIS1'] = min_shape[2]
+
+        create_huge_fits(masked_name, new_header)
+
+        # Get the slice needed
+        spat_slice = nd.find_objects(pbcov_plane > pb_lim)[0]
+
+        for chan in ProgressBar(range(cube.shape[0])):
+
+            orig_cube = fits.open(cube_name, mode='denywrite')
+            mask_cube_hdu = fits.open(masked_name, mode='update')
+
+            mask_cube_hdu[0].data[chan] = orig_cube[0].data[chan][spat_slice]
+
+            mask_cube_hdu.flush()
+            mask_cube_hdu.close()
+            orig_cube.close()
+
+        orig_cube = fits.open(cube_name, mode='denywrite')
+        if len(orig_cube) == 2:
+            mask_cube_hdu = fits.open(masked_name, mode='update')
+            mask_cube_hdu.append(orig_cube[1])
+            mask_cube_hdu.flush()
+            mask_cube_hdu.close()
+        orig_cube.close()
+
+    else:
+        masked_cube = masked_cube.minimal_subcube()
+        masked_cube.write(os.path.join(masked_name), overwrite=True)
 
 
-def common_beam_convolve(cube_name, output_name, is_huge=False,
+def common_beam_convolve(cube_name, output_name, is_huge=False, chunk=10,
                          **kwargs):
     '''
     Convolve a VaryingResolutionSpectralCube to have a common beam size,
@@ -64,12 +112,62 @@ def common_beam_convolve(cube_name, output_name, is_huge=False,
                  "Skipping operation.")
         return
 
-    cube = cube.convolve_to(cube.beams.common_beam(**kwargs))
+    com_beam = cube.beams.common_beam(**kwargs)
 
-    if is_huge:
-        save_to_huge_fits(output_name, cube, overwrite=True)
-    else:
-        cube.write(output_name, overwrite=True)
+    spec_axis = np.arange(cube.shape[0], dtype=int)
+
+    spec_axis_chunks = \
+        np.array_split(spec_axis,
+                       [chunk * i for i in
+                        range(1, int(np.ceil(len(spec_axis) / chunk)))])
+
+    if len(spec_axis_chunks[0]) == 0:
+        spec_axis_chunks = spec_axis_chunks[1:]
+
+    del cube
+
+    for ii, spec_chunk in enumerate(spec_axis_chunks):
+
+        log.info("On chunk {0} of {1}".format(ii + 1, len(spec_axis_chunks)))
+
+        cube = SpectralCube.read(cube_name)
+
+        planes = []
+
+        for chan in ProgressBar(spec_chunk):
+
+            planes.append(cube[chan].convolve_to(com_beam,
+                                                 convolve=convolve).value)
+
+        del cube
+
+        hdu = fits.open(cube_name, mode='update')
+
+        for chan, plane in zip(spec_chunk, planes):
+            hdu[0].data[chan] = plane
+
+        hdu.flush()
+        hdu.close()
+
+    # Since we're overwriting this cube, we have to remove the
+    # beams table and write the beam to the header
+    hdu = fits.open(cube_name, mode='update')
+
+    if len(hdu) == 2:
+        del hdu[1]
+
+    hdu[0].header.update(com_beam.to_header_keywords())
+
+    if "CASAMBM" in hdu[0].header:
+        del hdu[0].header['CASAMBM']
+
+    hdu.flush()
+    hdu.close()
+
+    # if is_huge:
+    #     save_to_huge_fits(output_name, cube, overwrite=True)
+    # else:
+    #     cube.write(output_name, overwrite=True)
 
 
 def signal_masking(cube_name, output_folder, method='ppv_connectivity',
@@ -78,14 +176,20 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
     Run a signal masking algorithm and save the resulting mask
     '''
 
-    cube = SpectralCube.read(cube_name)
+    # cube = SpectralCube.read(cube_name)
+
+    mask_name = \
+        "{}_source_mask.fits".format(cube_name.rstrip(".fits"))
+
+    mask_name = os.path.join(output_folder, mask_name)
 
     if method == "ppv_connectivity":
         if is_huge:
             # Big cubes need to use the per-spectrum based approach
-            masked_cube, mask = \
-                ppv_connectivity_perspec_masking(cube, **algorithm_kwargs)
+            ppv_connectivity_perspec_masking(cube_name, mask_name, **algorithm_kwargs)
         else:
+            raise NotImplementedError("Need to update this routine.")
+
             # Small cubes can be done quicker by using cube-operations
             masked_cube, mask = \
                 ppv_connectivity_masking(cube, **algorithm_kwargs)
@@ -104,6 +208,8 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
             raise TypeError("noise_map must be a file name or an array. Found"
                             " type {}".format(type(noise_map)))
 
+        raise NotImplementedError("Need to update this routine.")
+
         masked_cube, mask = ppv_dilation_masking(cube, noise_map,
                                                  **algorithm_kwargs)
     else:
@@ -112,24 +218,21 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
 
     # TODO: Make option for plane-by-plane write out for really large cubes.
 
-    new_header = cube.header.copy()
-    new_header["BUNIT"] = ""
-    new_header["BITPIX"] = 8
-
-    mask_name = \
-        "{}_source_mask.fits".format(cube_name.rstrip(".fits"))
-
-    save_name = os.path.join(output_folder, mask_name)
-
-    if is_huge:
-        save_to_huge_fits(save_name, mask.astype('>i2'), overwrite=True)
-    else:
-        mask_hdu = fits.PrimaryHDU(mask.astype('>i2'), header=new_header)
-        mask_hdu.writeto(save_name, overwrite=True)
+    # new_header = cube.header.copy()
+    # new_header["BUNIT"] = ""
+    # new_header["BITPIX"] = 8
 
 
-def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
-                             min_snr=2, edge_thresh=1, show_plots=False,
+    # if is_huge:
+    #     save_to_huge_fits(save_name, mask.astype('>i2'), overwrite=True)
+    # else:
+    #     mask_hdu = fits.PrimaryHDU(mask.astype('>i2'), header=new_header)
+    #     mask_hdu.writeto(save_name, overwrite=True)
+
+
+def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
+                             peak_snr=5., min_snr=2,
+                             edge_thresh=1, show_plots=False,
                              noise_map=None, verbose=False,
                              spatial_kernel='beam'):
     '''
@@ -260,25 +363,35 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
 
     if kernel is not None:
 
-        # Avoid edge effects in closing by padding by 1 in each axis
-        mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
-                      constant_values=False)
+        mask = fits.open(mask_name)[0]
 
         if verbose:
             iter = ProgressBar(mask.shape[0])
         else:
-            iter = xrange(mask.shape[0])
+            iter = range(mask.shape[0])
 
         for i in iter:
-            mask[i] = nd.binary_opening(mask[i], kernel)
-            mask[i] = nd.binary_closing(mask[i], kernel)
-            mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
-                                              connectivity=2)
-            mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
-                                            connectivity=2)
 
-        # Remove padding
-        mask = mask[:, 1:-1, 1:-1]
+            mask_hdu = fits.open(mask_name, mode='update')
+
+            mask = mask_hdu[0].data[i] > 0
+
+            # Avoid edge effects in closing by padding by 1 in each axis
+            mask_i = np.pad(mask, ((1, 1), (1, 1)), 'constant',
+                            constant_values=False)
+
+            mask_i = nd.binary_opening(mask_i, kernel)
+            mask_i = nd.binary_closing(mask_i, kernel)
+            mask_i = mo.remove_small_objects(mask_i, min_size=kernel_pix,
+                                             connectivity=2)
+            mask_i = mo.remove_small_holes(mask_i, min_size=kernel_pix,
+                                           connectivity=2)
+
+            # Remove padding
+            mask[i] = mask[1:-1, 1:-1].astype(mask_hdu.astype(int))
+
+            mask.flush()
+            mask.close()
 
     # Each region must contain a point above the peak_snr
     labels, num = nd.label(mask, np.ones((3, 3, 3)))
@@ -287,25 +400,38 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10, peak_snr=5.,
         if np.nanmax(snr[pts]) < peak_snr:
             mask[pts] = False
 
-    masked_cube = cube.with_mask(mask)
+    # masked_cube = cube.with_mask(mask)
 
-    return masked_cube, mask
+    # return masked_cube, mask
 
 
-def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
+def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
+                                     min_chan=10,
                                      peak_snr=5., min_snr=2, edge_thresh=1,
                                      show_plots=False, noise_map=None,
-                                     verbose=False, spatial_kernel='beam'):
+                                     verbose=False, spatial_kernel='beam',
+                                     chunk=200000):
     '''
     Uses the same approach as `~ppv_connectivity_masking`, but avoids doing
     any operations with the full cube. This will take longer, but will use
     far less memory.
     '''
 
+    cube = SpectralCube.read(cube_name)
+
+    new_header = cube.header.copy()
+    new_header["BUNIT"] = ""
+    new_header["BITPIX"] = 8
+
+    create_huge_fits(mask_name, new_header, shape=cube.shape)
+
+    # mask_hdu = fits.PrimaryHDU(mask.astype('>i2'), header=new_header)
+    # mask_hdu.writeto(save_name, overwrite=True)
+
     pixscale = proj_plane_pixel_scales(cube.wcs)[0]
 
-    # # Want to smooth the mask edges
-    mask = cube.mask.include().copy()
+    # Want to smooth the mask edges
+    mask = cube.mask.include()
 
     # Set smoothing parameters and # consecutive channels.
     smooth_chans = int(round_up_to_odd(smooth_chans))
@@ -317,67 +443,117 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
     summed_mask = mask.sum(0)
     posns = np.where(summed_mask >= num_chans)
 
+    # Save some memory
+    del mask, cube
+
     # Blank the spectra for which none are above min_snr
-    bad_pos = np.where(summed_mask < num_chans)
-    mask[:, bad_pos[0], bad_pos[1]] = False
+    # bad_pos = np.where(summed_mask < num_chans)
+    # mask[:, bad_pos[0], bad_pos[1]] = False
 
-    iter = zip(*posns)
-    if verbose:
-        iter = ProgressBar(iter)
+    # Create chunks of the positions
+    yposn_chunks = np.array_split(posns[0],
+                                  [chunk * i for i in
+                                   range(len(posns[0]) / chunk)])
+    xposn_chunks = np.array_split(posns[1],
+                                  [chunk * i for i in
+                                   range(len(posns[0]) / chunk)])
 
-    for i, j in iter:
+    for k in range(len(yposn_chunks)):
+        log.info("On {0} of {1}".format(k, len(yposn_chunks) + 1))
 
-        spectrum = cube[:, i, j].value
-
-        # Assume for now that the noise level is ~ constant across the
-        # channels. This is fine for HI, but not for, e.g., CO(1-0).
-        smoothed = medfilt(spectrum, smooth_chans)
-
-        mad = sigma_rob(smoothed, thresh=min_snr, iterations=5)
-
-        snr = spectrum / mad
-
-        sequences = _get_mask_edges(snr, min_snr, peak_snr, edge_thresh,
-                                    num_chans)
-
-        if len(sequences) == 0:
-            mask[:, i, j] = False
-            continue
-
-        bad_posns = \
-            list(set(np.arange(cube.shape[0])) - set(list(chain(*sequences))))
-
-        mask[:, i, j][bad_posns] = False
+        y_chunk = yposn_chunks[k]
+        x_chunk = xposn_chunks[k]
 
         if show_plots:
-            p.subplot(121)
-            p.plot(cube.spectral_axis.value, snr[:, i, j])
-            min_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][-1]]
-            max_val = cube.spectral_axis.value[np.where(mask[:, i, j])[0][0]]
-            p.vlines(min_val, 0,
-                     np.nanmax(snr[:, i, j]))
-            p.vlines(max_val, 0,
-                     np.nanmax(snr[:, i, j]))
-            p.plot(cube.spectral_axis.value,
-                   snr[:, i, j] * mask[:, i, j], 'bD')
+            cube = SpectralCube.read(cube_name)
+            specs = [cube[0].data[:, i, j] for i, j in zip(y_chunk, x_chunk)]
 
-            p.subplot(122)
-            p.plot(cube.spectral_axis.value, spectrum, label='Cube')
-            p.plot(cube.spectral_axis.value, smoothed,
-                   label='Smooth Cube')
-            p.axvline(min_val)
-            p.axvline(max_val)
-            p.plot(cube.spectral_axis.value,
-                   smoothed * mask[:, i, j], 'bD')
-            p.draw()
-            raw_input("Next spectrum?")
-            p.clf()
+        else:
+            cube = fits.open(cube_name, mode='denywrite')
+
+            specs = [cube[0].data[:, i, j] for i, j in zip(y_chunk, x_chunk)]
+
+            cube.close()
+            del cube
+
+        if verbose:
+            iter = ProgressBar(len(y_chunk))
+        else:
+            iter = range(len(y_chunk))
+
+        masks = []
+
+        for ii in iter:
+
+            spectrum = specs[ii]
+
+            mask_spec = np.zeros_like(spectrum, dtype=bool)
+
+            # Assume for now that the noise level is ~ constant across the
+            # channels. This is fine for HI, but not for, e.g., CO(1-0).
+            smoothed = medfilt(spectrum, smooth_chans)
+
+            mad = sigma_rob(smoothed, thresh=min_snr, iterations=5)
+
+            snr = spectrum / mad
+
+            if np.nanmax(snr) < peak_snr:
+                masks.append(mask_spec)
+                continue
+
+            sequences = _get_mask_edges(snr, min_snr, peak_snr, edge_thresh,
+                                        num_chans)
+
+            if len(sequences) == 0:
+                masks.append(mask_spec)
+                continue
+            else:
+                good_posns = list(chain(*sequences))
+
+                mask_spec[good_posns] = True
+
+                # masks[ii] = mask_spec
+                masks.append(mask_spec)
+
+            if show_plots and mask_spec.any():
+                p.subplot(121)
+                p.plot(cube.spectral_axis.value, snr)
+                min_val = cube.spectral_axis.value[np.where(mask_spec)[0][-1]]
+                max_val = cube.spectral_axis.value[np.where(mask_spec)[0][0]]
+                p.vlines(min_val, 0,
+                         np.nanmax(snr))
+                p.vlines(max_val, 0,
+                         np.nanmax(snr))
+                p.plot(cube.spectral_axis.value,
+                       snr * mask_spec, 'bD')
+
+                p.subplot(122)
+                p.plot(cube.spectral_axis.value, spectrum, label='Cube')
+                p.plot(cube.spectral_axis.value, smoothed,
+                       label='Smooth Cube')
+                p.axvline(min_val)
+                p.axvline(max_val)
+                p.plot(cube.spectral_axis.value,
+                       smoothed * mask_spec, 'bD')
+                p.draw()
+                raw_input("Next spectrum?")
+                p.clf()
+
+        mask = fits.open(mask_name, mode='update')
+        for i, j, mask_spec in zip(y_chunk, x_chunk, masks):
+            mask[0].data[:, i, j] = mask_spec.astype(">i2")
+
+        mask.flush()
+        mask.close()
+
+        del mask
+
+    cube = SpectralCube.read(cube_name)
 
     # Now set the spatial connectivity requirements.
     if spatial_kernel is "beam":
-
         if hasattr(cube, 'beams'):
-            kernel = cube.beams.common_beam().as_tophat_kernel(pixscale)
+            kernel = cube.beams.largest_beam().as_tophat_kernel(pixscale)
         elif hasattr(cube, 'beam'):
             kernel = cube.beam.as_tophat_kernel(pixscale)
         else:
@@ -393,36 +569,49 @@ def ppv_connectivity_perspec_masking(cube, smooth_chans=31, min_chan=10,
 
     if kernel is not None:
 
-        # Avoid edge effects in closing by padding by 1 in each axis
-        mask = np.pad(mask, ((0, 0), (1, 1), (1, 1)), 'constant',
-                      constant_values=False)
+        mask = fits.open(mask_name)[0]
 
         if verbose:
             iter = ProgressBar(mask.shape[0])
         else:
-            iter = xrange(mask.shape[0])
+            iter = range(mask.shape[0])
+
+        del mask
 
         for i in iter:
-            mask[i] = nd.binary_opening(mask[i], kernel)
-            mask[i] = nd.binary_closing(mask[i], kernel)
-            mask[i] = mo.remove_small_objects(mask[i], min_size=kernel_pix,
-                                              connectivity=2)
-            mask[i] = mo.remove_small_holes(mask[i], min_size=kernel_pix,
-                                            connectivity=2)
 
-        # Remove padding
-        mask = mask[:, 1:-1, 1:-1]
+            mask_hdu = fits.open(mask_name, mode='update')
+
+            mask = mask_hdu[0].data[i] > 0
+
+            # Avoid edge effects in closing by padding by 1 in each axis
+            mask_i = np.pad(mask, ((1, 1), (1, 1)), 'constant',
+                            constant_values=False)
+
+            mask_i = nd.binary_opening(mask_i, kernel)
+            mask_i = nd.binary_closing(mask_i, kernel)
+            mask_i = mo.remove_small_objects(mask_i, min_size=kernel_pix,
+                                             connectivity=2)
+            mask_i = mo.remove_small_holes(mask_i, min_size=kernel_pix,
+                                           connectivity=2)
+
+            # Remove padding
+            mask_hdu[0].data[i] = mask_i[1:-1, 1:-1].astype(">i2")
+
+            mask_hdu.flush()
+            mask_hdu.close()
 
     # Each region must contain a point above the peak_snr
-    labels, num = nd.label(mask, np.ones((3, 3, 3)))
-    for n in range(1, num + 1):
-        pts = np.where(labels == n)
-        if np.nanmax(snr[pts]) < peak_snr:
-            mask[pts] = False
+    # mask = mask_hdu[0].data > 0
+    # labels, num = nd.label(mask, np.ones((3, 3, 3)))
+    # for n in range(1, num + 1):
+    #     pts = np.where(labels == n)
+    #     if np.nanmax(snr[pts]) < peak_snr:
+    #         mask[pts] = False
 
-    masked_cube = cube.with_mask(mask)
+    # masked_cube = cube.with_mask(mask)
 
-    return masked_cube, mask
+    # return masked_cube, mask
 
 
 def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
