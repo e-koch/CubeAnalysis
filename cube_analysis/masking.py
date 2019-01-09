@@ -22,7 +22,7 @@ try:
 except ImportError:
     SIGNAL_ID_INSTALL = False
 
-from .io_utils import save_to_huge_fits, create_huge_fits
+from .io_utils import create_huge_fits
 from .progressbar import ProgressBar
 
 
@@ -384,7 +384,7 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
             mask_i = nd.binary_closing(mask_i, kernel)
             mask_i = mo.remove_small_objects(mask_i, min_size=kernel_pix,
                                              connectivity=2)
-            mask_i = mo.remove_small_holes(mask_i, min_size=kernel_pix,
+            mask_i = mo.remove_small_holes(mask_i, area_threshold=kernel_pix,
                                            connectivity=2)
 
             # Remove padding
@@ -408,7 +408,8 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
 def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
                                      min_chan=10,
                                      peak_snr=5., min_snr=2, edge_thresh=1,
-                                     show_plots=False, noise_map=None,
+                                     show_plots=False, pb_map_name=None,
+                                     noise_spectrum=None,
                                      verbose=False, spatial_kernel='beam',
                                      chunk=200000):
     '''
@@ -418,6 +419,21 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
     '''
 
     cube = SpectralCube.read(cube_name)
+
+    # Load in the pb map. If it's a cube, take the first channel and assume
+    # The coverage is constant in the spectral dimension
+    if pb_map_name is not None:
+        pb_hdu = fits.open(pb_map_name, mode='denywrite')[0]
+        if len(pb_hdu.shape) == 3:
+            pb_map = pb_hdu.data[0].copy()
+        elif len(pb_hdu.shape) == 2:
+            pb_map = pb_hdu.data.copy()
+        else:
+            raise ValueError("pb_map must have 2 or 3 dimensions.")
+
+        del pb_hdu
+    else:
+        pb_map = np.ones(cube.shape[1:])
 
     new_header = cube.header.copy()
     new_header["BUNIT"] = ""
@@ -430,9 +446,6 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
 
     pixscale = proj_plane_pixel_scales(cube.wcs)[0]
 
-    # Want to smooth the mask edges
-    mask = cube.mask.include()
-
     # Set smoothing parameters and # consecutive channels.
     smooth_chans = int(round_up_to_odd(smooth_chans))
 
@@ -440,11 +453,15 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
     num_chans = min_chan
 
     # Look for places where there is the minimum number of channels
-    summed_mask = mask.sum(0)
+
+    # Want to smooth the mask edges
+    summed_mask = np.zeros(cube.shape[1:], dtype=int)
+    for chan in range(cube.shape[0]):
+        summed_mask += cube.mask[chan].include()
     posns = np.where(summed_mask >= num_chans)
 
     # Save some memory
-    del mask, cube
+    del cube
 
     # Blank the spectra for which none are above min_snr
     # bad_pos = np.where(summed_mask < num_chans)
@@ -475,6 +492,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
             cube = fits.open(cube_name, mode='denywrite')
 
             specs = [cube[0].data[:, i, j] for i, j in zip(y_chunk, x_chunk)]
+            pb_vals = [pb_map[i, j] for i, j in zip(y_chunk, x_chunk)]
 
             cube.close()
             del cube
@@ -490,6 +508,8 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
 
             spectrum = specs[ii]
 
+            pb_val = pb_vals[ii]
+
             mask_spec = np.zeros_like(spectrum, dtype=bool)
 
             # Assume for now that the noise level is ~ constant across the
@@ -498,7 +518,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
 
             mad = sigma_rob(smoothed, thresh=min_snr, iterations=5)
 
-            snr = spectrum / mad
+            snr = spectrum / (mad / pb_val)
 
             if np.nanmax(snr) < peak_snr:
                 masks.append(mask_spec)
@@ -562,6 +582,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
         else:
             raise AttributeError("cube doesn't have 'beam' or 'beams'?")
         kernel_pix = (kernel.array > 0).sum()
+        kernel = kernel.array > 0
 
     else:
         if isinstance(spatial_kernel, np.ndarray):
@@ -595,7 +616,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
             mask_i = nd.binary_closing(mask_i, kernel)
             mask_i = mo.remove_small_objects(mask_i, min_size=kernel_pix,
                                              connectivity=2)
-            mask_i = mo.remove_small_holes(mask_i, min_size=kernel_pix,
+            mask_i = mo.remove_small_holes(mask_i, area_threshold=kernel_pix,
                                            connectivity=2)
 
             # Remove padding
@@ -706,7 +727,7 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
     kernel = np.ones((3, 3, 3))
     labels, num = nd.label(mask_low, kernel)
 
-    iter = xrange(1, num + 1)
+    iter = range(1, num + 1)
     if verbose:
         iter = ProgressBar(iter)
 
