@@ -62,10 +62,15 @@ def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
 
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log.info("Starting signal masking at {}".format(tstamp))
-    signal_masking(cube_name_pbmask, output_folder, **masking_kwargs)
 
     mask_name = \
         "{}_source_mask.fits".format(cube_name_pbmask.rstrip(".fits"))
+
+    if os.path.exists(mask_name):
+        log.info("Found existing signal masking. Skipping to making moment "
+                 "images.")
+    else:
+        signal_masking(cube_name_pbmask, output_folder, **masking_kwargs)
 
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log.info("Starting moment making at {}".format(tstamp))
