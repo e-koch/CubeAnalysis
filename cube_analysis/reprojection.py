@@ -126,15 +126,17 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # If there is one beam for all channels, attach to the header
     if common_beam and isinstance(beams, repeat):
-            new_header.update(beams.next().to_header_keywords())
+            new_header.update(next(beams).to_header_keywords())
 
     # Build up the reprojected cube per channel
     save_name = os.path.join(output_folder, output_cubename)
 
     if verbose:
         log.info("Creating new FITS file.")
+
+    print(save_name)
     output_fits = create_huge_fits(save_name, new_header, dtype=None,
-                                   return_hdu=True)
+                                   return_hdu=True, verbose=verbose)
 
     targ_header = targ_cube[0].header
     targ_dtype = targ_cube[:1, 0, 0].dtype
@@ -142,7 +144,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     chan_iter = zip(range(cube.shape[0]), beams)
     if verbose:
         log.info("Reprojecting and writing.")
-        chan_iter = ProgressBar(chan_iter)
+        pbar = ProgressBar(cube.shape[0] + 1)
 
     for chan, beam in chan_iter:
         proj = cube[chan]
@@ -155,6 +157,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         output_fits[0].data[chan] = proj
         if chan % chunk == 0:
             output_fits.flush()
+
+        if verbose:
+            pbar.update(chan + 1)
+
     output_fits.close()
 
     # If there was a table of beams, be sure to append this.
