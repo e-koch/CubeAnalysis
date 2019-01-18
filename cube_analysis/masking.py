@@ -26,7 +26,8 @@ from .io_utils import create_huge_fits
 from .progressbar import ProgressBar
 
 
-def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True):
+def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True,
+               verbose=False):
     '''
     Use the PB coverage map to mask the cleaned cube.
     '''
@@ -60,21 +61,36 @@ def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True):
                                               pb_lim)
 
     if is_huge:
-        # Set out the shape from the first couple of channels
 
-        min_shape = masked_cube[:2].minimal_subcube().shape
+        # Set out the shape from the first couple of channels
+        # We also need to update the CRPIX and such.
+
+        min_plane = masked_cube[:1].minimal_subcube()[0]
+        min_header = min_plane.header
 
         # Create the FITS file, then write out per plane
         new_header = masked_cube.header.copy()
-        new_header['NAXIS2'] = min_shape[1]
-        new_header['NAXIS1'] = min_shape[2]
+        # Keep all of the spatial slice header info
+        for key in min_header:
+            if key not in new_header:
+                continue
+            try:
+                new_header[key] = min_header[key]
+            # CASA likes to add non-FITS compliant keys.
+            # Let's just ignore those, since they are already in
+            # new_header
+            except ValueError:
+                pass
 
-        create_huge_fits(masked_name, new_header)
+        create_huge_fits(masked_name, new_header, verbose=verbose)
 
         # Get the slice needed
         spat_slice = nd.find_objects(pbcov_plane > pb_lim)[0]
 
-        for chan in ProgressBar(range(cube.shape[0])):
+        if verbose:
+            pbar = ProgressBar(cube.shape[0])
+
+        for chan in range(cube.shape[0]):
 
             orig_cube = fits.open(cube_name, mode='denywrite')
             mask_cube_hdu = fits.open(masked_name, mode='update')
@@ -84,6 +100,9 @@ def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True):
             mask_cube_hdu.flush()
             mask_cube_hdu.close()
             orig_cube.close()
+
+            if verbose:
+                pbar.update(chan + 1)
 
         orig_cube = fits.open(cube_name, mode='denywrite')
         if len(orig_cube) == 2:
