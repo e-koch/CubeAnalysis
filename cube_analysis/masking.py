@@ -205,13 +205,25 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
     if method == "ppv_connectivity":
         if is_huge:
             # Big cubes need to use the per-spectrum based approach
-            ppv_connectivity_perspec_masking(cube_name, mask_name, **algorithm_kwargs)
+            ppv_connectivity_perspec_masking(cube_name, mask_name,
+                                             **algorithm_kwargs)
         else:
-            raise NotImplementedError("Need to update this routine.")
+            # raise NotImplementedError("Need to update this routine.")
 
             # Small cubes can be done quicker by using cube-operations
-            masked_cube, mask = \
+
+            cube = SpectralCube.read(cube_name)
+
+            mask = \
                 ppv_connectivity_masking(cube, **algorithm_kwargs)
+
+            new_header = cube.header.copy()
+            new_header["BUNIT"] = ""
+            new_header["BITPIX"] = 8
+
+            mask_hdu = fits.PrimaryHDU(mask.astype(">i2"), new_header)
+            mask_hdu.writeto(mask_name)
+
     elif method == "ppv_dilation":
         if 'noise_map' not in algorithm_kwargs:
             raise ValueError("Must specify an RMS map as 'noise_map'.")
@@ -249,7 +261,7 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
     #     mask_hdu.writeto(save_name, overwrite=True)
 
 
-def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
+def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10,
                              peak_snr=5., min_snr=2,
                              edge_thresh=1, show_plots=False,
                              noise_map=None, verbose=False,
@@ -356,7 +368,7 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
             p.plot(cube.spectral_axis.value,
                    smooth_cube[:, i, j] * mask[:, i, j], 'bD')
             p.draw()
-            raw_input("Next spectrum?")
+            input("Next spectrum?")
             p.clf()
 
     # initial_mask = mask.copy()
@@ -364,15 +376,15 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
     # Now set the spatial connectivity requirements.
     if spatial_kernel is "beam":
         if hasattr(cube, 'beams'):
-            kernel = cube.beams.common_beam().as_tophat_kernel(pixscale)
+            kernel = cube.beams.common_beam().as_tophat_kernel(pixscale).array > 0
         elif hasattr(cube, 'beam'):
-            kernel = cube.beam.as_tophat_kernel(pixscale)
+            kernel = cube.beam.as_tophat_kernel(pixscale).array > 0
         else:
             raise AttributeError("cube doesn't have 'beam' or 'beams'?")
         # kernel = Beam(major=0.75 * cube.beam.major,
         #               minor=0.75 * cube.beam.minor,
         #               pa=cube.beam.pa).as_tophat_kernel(pixscale)
-        kernel_pix = (kernel.array > 0).sum()
+        kernel_pix = (kernel > 0).sum()
     else:
         if isinstance(spatial_kernel, np.ndarray):
             kernel = spatial_kernel
@@ -382,7 +394,7 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
 
     if kernel is not None:
 
-        mask = fits.open(mask_name)[0]
+        # mask = fits.open(mask_name)[0]
 
         if verbose:
             iter = ProgressBar(mask.shape[0])
@@ -391,12 +403,12 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
 
         for i in iter:
 
-            mask_hdu = fits.open(mask_name, mode='update')
+            # mask_hdu = fits.open(mask_name, mode='update')
 
-            mask = mask_hdu[0].data[i] > 0
+            # mask = mask_hdu[0].data[i] > 0
 
             # Avoid edge effects in closing by padding by 1 in each axis
-            mask_i = np.pad(mask, ((1, 1), (1, 1)), 'constant',
+            mask_i = np.pad(mask[i], ((1, 1), (1, 1)), 'constant',
                             constant_values=False)
 
             mask_i = nd.binary_opening(mask_i, kernel)
@@ -407,10 +419,11 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
                                            connectivity=2)
 
             # Remove padding
-            mask[i] = mask[1:-1, 1:-1].astype(mask_hdu.astype(int))
+            # mask[i] = mask[1:-1, 1:-1].astype(mask_hdu.astype(int))
+            mask[i] = mask_i[1:-1, 1:-1]
 
-            mask.flush()
-            mask.close()
+            # mask.flush()
+            # mask.close()
 
     # Each region must contain a point above the peak_snr
     labels, num = nd.label(mask, np.ones((3, 3, 3)))
@@ -418,6 +431,8 @@ def ppv_connectivity_masking(cube, mask_name, smooth_chans=31, min_chan=10,
         pts = np.where(labels == n)
         if np.nanmax(snr[pts]) < peak_snr:
             mask[pts] = False
+
+    return mask
 
     # masked_cube = cube.with_mask(mask)
 
