@@ -15,7 +15,8 @@ from .io_utils import create_huge_fits, save_to_huge_fits
 def reproject_cube(cubename, targ_cubename, output_cubename,
                    output_folder="", reproject_type='all',
                    common_beam=False, save_spectral=True,
-                   is_huge=True, chunk=100, verbose=True):
+                   is_huge=True, chunk=100, verbose=True,
+                   wcs_check=True):
     '''
     Reproject one cube to match another.
     '''
@@ -101,12 +102,12 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
     # Add a check to make sure the WCS info matches
     if reproject_type == 'all':
-        if not targ_cube.wcs.wcs.compare(WCS(new_header).wcs):
+        if not targ_cube.wcs.wcs.compare(WCS(new_header).wcs) and wcs_check:
             print(new_header)
             raise WcsError("New header WCS does not match the target WCS. "
                            "Check the above header for the issue above.")
     else:
-        if not targ_cube.wcs.celestial.wcs.compare(WCS(new_header).celestial.wcs):
+        if not targ_cube.wcs.celestial.wcs.compare(WCS(new_header).celestial.wcs) and wcs_check:
             print(new_header)
             raise WcsError("New header celestial WCS does not match the target"
                            " celestial WCS. "
