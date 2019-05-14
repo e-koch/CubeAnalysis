@@ -10,6 +10,7 @@ from astropy.io import fits
 from warnings import warn
 from astropy import log
 from galaxies import Galaxy
+from astropy.coordinates import SkyCoord
 
 from .feather_cubes import get_channel_chunks
 from .progressbar import _map_context
@@ -28,14 +29,36 @@ def deproject(image, header, gal, conv_circ_beam=False, inc_correction=True):
 
     inc = gal.inclination
     pa = gal.position_angle
+    gal_centre = gal.center_position
 
     image_copy = image.copy()
     mask = np.isfinite(image)
     image_copy[~mask] = 0.0
 
-    # First rotate to have the PA at 0 along the y axis.
-    rot = nd.rotate(image_copy, pa.to(u.deg).value - 180)
-    rot_mask = nd.rotate(mask.astype(float), pa.to(u.deg).value - 180)
+    # Shift the centre of the image to be the galactic centre
+    pix_centre = (image.shape[0] // 2, image.shape[1] // 2)
+
+    dec, ra = image.spatial_coordinate_map
+
+    skycoord_map = SkyCoord(ra, dec)
+
+    sep_dist = gal_centre.separation(skycoord_map)
+
+    # Now find the smallest separation position
+    gal_centre_pix = np.unravel_index(np.argmin(sep_dist), sep_dist.shape)
+
+    # Get the shift
+    shift_pix = [img_mid - gal_mid for img_mid, gal_mid in
+                 zip(pix_centre, gal_centre_pix)]
+
+    shift_pix = tuple(shift_pix)
+
+    shift_img = nd.shift(image_copy, shift_pix)
+    shift_mask = nd.shift(mask.astype(float), shift_pix)
+
+    # Then rotate to have the PA at 0 along the y axis.
+    rot = nd.rotate(shift_img, pa.to(u.deg).value - 180)
+    rot_mask = nd.rotate(shift_mask, pa.to(u.deg).value - 180)
     # Now scale the x axis to correct for inclination
     deproj = nd.zoom(rot, (1., 1. / np.cos(inc).value))
     deproj_mask = nd.zoom(rot_mask, (1., 1. / np.cos(inc).value))
@@ -44,7 +67,7 @@ def deproject(image, header, gal, conv_circ_beam=False, inc_correction=True):
     if inc_correction:
         deproj = deproj * np.cos(inc)
 
-    deproj[deproj_mask < 1e-5] = np.NaN
+    deproj[deproj_mask < 0.5] = np.NaN
 
     return deproj
 
