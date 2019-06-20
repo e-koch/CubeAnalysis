@@ -94,10 +94,13 @@ def feather_cube(cube_hi, cube_lo, pb_hi=None,
             output_hdu.close()
 
     if save_feather:
+        output_hdu = fits.open(save_name, mode='update')
 
         # Append the beam table, if needed
         if hasattr(cube_hi, 'beams'):
             from spectral_cube.cube_utils import beams_to_bintable
+            # NOTE: this does seem to read in the data upon close.
+            # So be careful.
             output_hdu.append(beams_to_bintable(cube_hi.beams))
 
         output_hdu.close()
