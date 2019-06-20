@@ -161,7 +161,8 @@ def _feather(args):
 def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
                          restfreq=1.42040575177 * u.GHz,
                          verbose=True, num_cores=1, chunk=100,
-                         weights=None):
+                         weights=None, relax_spectral_check=False,
+                         spec_check_kwargs={}):
     '''
     Record the ratios of the flux in the overlap region between the cubes.
 
@@ -169,11 +170,12 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
 
     '''
 
-    # Ensure the spectral axes are the same.
-    if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
-                       cube_lo.spectral_axis.value):
-        raise Warning("The spectral axes do not match. Spectrally regrid the "
-                      "cubes to be the same before feathering.")
+    if not relax_spectral_check:
+        if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
+                           cube_lo.spectral_axis.value,
+                           **spec_check_kwargs):
+            raise Warning("The spectral axes do not match. Spectrally regrid "
+                          "the cubes to be the same before feathering.")
 
     num_chans = cube_hi.shape[0]
     chunked_channels = get_channel_chunks(num_chans, chunk)
@@ -231,17 +233,21 @@ def _compare(args):
 
 def flux_recovery(cube_hi, cube_lo, frequency=1.42040575177 * u.GHz,
                   verbose=True, doplot=False,
-                  num_cores=1, chunk=100, mask=None):
+                  num_cores=1, chunk=100, mask=None,
+                  relax_spectral_check=False,
+                  spec_check_kwargs={}):
     '''
     Calculate the fraction of flux recovered between the high-resolution
     (interferometer) cube and the low-resolution (single-dish) cube.
     '''
 
     # Ensure the spectral axes are the same.
-    if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
-                       cube_lo.spectral_axis.value):
-        raise Warning("The spectral axes do not match. Spectrally regrid the "
-                      "cubes to be the same before feathering.")
+    if not relax_spectral_check:
+        if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
+                           cube_lo.spectral_axis.value,
+                           **spec_check_kwargs):
+            raise Warning("The spectral axes do not match. Spectrally regrid "
+                          "the cubes to be the same before feathering.")
 
     if mask is not None:
         if mask.shape != cube_hi[0].shape:
