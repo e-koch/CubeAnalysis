@@ -207,14 +207,13 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
 
         chan_out = np.array([out[0] for out in output])
 
-        for jj in chan_out.argsort():
+        for out in output:
+            radii.append(out[1][0])
+            ratios.append(out[1][1])
+            highres_pts.append(out[1][2])
+            lowres_pts.append(out[1][3])
 
-            radii.append(output[jj][1][0])
-            ratios.append(output[jj][1][1])
-            highres_pts.append(output[jj][1][2])
-            lowres_pts.append(output[jj][1][3])
-
-    return radii, ratios, highres_pts, lowres_pts
+    return radii, ratios, highres_pts, lowres_pts, chan_out
 
 
 def _compare(args):
