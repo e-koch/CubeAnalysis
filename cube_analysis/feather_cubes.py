@@ -23,7 +23,9 @@ def feather_cube(cube_hi, cube_lo, pb_hi=None,
                  save_name=None, num_cores=1, chunk=100,
                  restfreq=1.42040575177 * u.GHz,
                  weights=None,
-                 feather_kwargs={}):
+                 feather_kwargs={},
+                 relax_spectral_check=False,
+                 spec_check_kwargs={}):
     '''
     Feather two cubes together. The spectral axis of the cubes *must match*.
     This function is specifically for cube too large to fit in memory. The
@@ -31,10 +33,12 @@ def feather_cube(cube_hi, cube_lo, pb_hi=None,
     '''
 
     # Ensure the spectral axes are the same.
-    if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
-                       cube_lo.spectral_axis.value):
-        raise Warning("The spectral axes do not match. Spectrally regrid the "
-                      "cubes to be the same before feathering.")
+    if not relax_spectral_check:
+        if not np.allclose(cube_hi.spectral_axis.to(cube_lo._spectral_unit).value,
+                           cube_lo.spectral_axis.value,
+                           **spec_check_kwargs):
+            raise Warning("The spectral axes do not match. Spectrally regrid "
+                          "the cubes to be the same before feathering.")
 
     if save_feather:
         if save_name is None:
