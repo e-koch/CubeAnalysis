@@ -18,7 +18,8 @@ from .io_utils import create_huge_fits
 from .progressbar import _map_context
 
 
-def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
+def feather_cube(cube_hi, cube_lo, pb_hi=None,
+                 verbose=True, save_feather=True,
                  save_name=None, num_cores=1, chunk=100,
                  restfreq=1.42040575177 * u.GHz,
                  weights=None,
@@ -59,6 +60,7 @@ def feather_cube(cube_hi, cube_lo, verbose=True, save_feather=True,
         log.info("On chunk {0} of {1}".format(i + 1, len(chunked_channels)))
 
         changen = ((chan, cube_hi[chan:chan + 1], cube_lo[chan:chan + 1],
+                    pb_hi[chan:chan + 1] if pb_hi is not None else None,
                     freq_axis[chan], feather_kwargs) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose,
@@ -96,7 +98,7 @@ def _feather(args):
     '''
     Feather 2D images together.
     '''
-    chan, plane_hi, plane_lo, freq, kwargs = args
+    chan, plane_hi, plane_lo, pb_hi, freq, kwargs = args
 
     # TODO: When Jy/beam is supported in SpectralCube, just let uvcombine
     # match the units. BUT we also need Slice objects to retain a 1 element
@@ -130,7 +132,9 @@ def _feather(args):
     else:
         plane_lo_hdu = plane_lo.hdu
 
-    feathered = feather_simple(plane_hi_hdu, plane_lo_hdu, **kwargs)
+    feathered = feather_simple(plane_hi_hdu, plane_lo_hdu,
+                               pbresponse=pb_hi,
+                               **kwargs)
 
     # Expect that the interferometer image will cover a smaller region.
     # Cut to that region.
