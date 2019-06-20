@@ -10,6 +10,7 @@ from uvcombine.uvcombine import feather_simple, feather_compare
 from astropy import log
 import astropy.units as u
 from astropy.io import fits
+import os
 
 import numpy as np
 
@@ -20,6 +21,7 @@ from .progressbar import _map_context
 
 def feather_cube(cube_hi, cube_lo, pb_hi=None,
                  verbose=True, save_feather=True,
+                 overwrite=False,
                  save_name=None, num_cores=1, chunk=100,
                  restfreq=1.42040575177 * u.GHz,
                  weights=None,
@@ -45,6 +47,12 @@ def feather_cube(cube_hi, cube_lo, pb_hi=None,
             raise TypeError("save_name must be given the save the shifted "
                             "cube.")
 
+        if os.path.exists(save_name):
+            if overwrite:
+                os.system("rm {}".format(save_name))
+            else:
+                raise OSError("Cube already exists. Delete or enable "
+                              "`overwrite=True`.")
         create_huge_fits(save_name, cube_hi.header,
                          return_hdu=False)
     else:
@@ -68,9 +76,9 @@ def feather_cube(cube_hi, cube_lo, pb_hi=None,
                     freq_axis[chan], feather_kwargs) for chan in chunk_chans)
 
         with _map_context(num_cores, verbose=verbose,
-                          num_jobs=len(chunk_chans)) as map:
+                          num_jobs=len(chunk_chans)) as mapper:
             log.info("Feathering")
-            output = map(_feather, changen)
+            output = mapper(_feather, changen)
 
         if save_feather:
             output_hdu = fits.open(save_name, mode='update')
@@ -136,8 +144,11 @@ def _feather(args):
     else:
         plane_lo_hdu = plane_lo.hdu
 
+    if pb_hi is not None:
+        pb_hi_value = pb_hi[0].value
+
     feathered = feather_simple(plane_hi_hdu, plane_lo_hdu,
-                               pbresponse=pb_hi,
+                               pbresponse=pb_hi_value,
                                **kwargs)
 
     # Expect that the interferometer image will cover a smaller region.
@@ -320,7 +331,7 @@ def get_channel_chunks(num_chans, chunk):
     chunked_channels : list of np.ndarray
         List of channels in chunks of the given size.
     '''
-    channels = np.arange(num_chans)
+    channels = np.arange(num_chans, dtype=int)
     chunked_channels = \
         np.array_split(channels,
                        [chunk * i for i in range(num_chans // chunk)])
