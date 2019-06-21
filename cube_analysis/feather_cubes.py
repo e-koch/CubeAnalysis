@@ -183,6 +183,7 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
     num_chans = cube_hi.shape[0]
     chunked_channels = get_channel_chunks(num_chans, chunk)
 
+    chan_out = []
     radii = []
     ratios = []
     highres_pts = []
@@ -208,9 +209,9 @@ def feather_compare_cube(cube_hi, cube_lo, LAS, lowresfwhm=None,
                           num_jobs=len(chunk_chans)) as map:
             output = map(_compare, changen)
 
-        chan_out = np.array([out[0] for out in output])
-
         for out in output:
+
+            chan_out.append(out[0])
             radii.append(out[1][0])
             ratios.append(out[1][1])
             highres_pts.append(out[1][2])
