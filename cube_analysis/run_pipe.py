@@ -7,7 +7,9 @@ from .masking import pb_masking, signal_masking, common_beam_convolve
 from .moments import make_moments
 
 
-def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
+def run_pipeline(cube_name, output_folder,
+                 apply_pbmasking=True,
+                 pb_file=None, pb_lim=0.5,
                  convolve_to_common_beam=False, combeam_kwargs={},
                  masking_kwargs={}, moment_kwargs={}):
     '''
@@ -30,6 +32,8 @@ def run_pipeline(cube_name, output_folder, pb_file=None, pb_lim=0.5,
     log.info("Starting PB masking at {}".format(tstamp))
     if pb_file is None:
         log.info("No PB file given. No PB masking applied.")
+        cube_name_pbmask = cube_name
+    elif apply_pbmasking is False:
         cube_name_pbmask = cube_name
     else:
         cube_name_pbmask = \
