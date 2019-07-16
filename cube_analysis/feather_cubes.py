@@ -150,6 +150,9 @@ def _feather(args):
     if pb_hi is not None:
         pb_hi_value = pb_hi[0].value
 
+    plane_hi_hdu.header['REFFREQ'] = freq.to(u.Hz).value
+    plane_lo_hdu.header['REFFREQ'] = freq.to(u.Hz).value
+
     feathered = feather_simple(plane_hi_hdu, plane_lo_hdu,
                                pbresponse=pb_hi_value,
                                **kwargs)
