@@ -790,6 +790,9 @@ def sigma_rob(data, iterations=1, thresh=3.0, axis=None):
 
 
 def noise_estimation(cube_name, pb_name, mask_name):
+    '''
+    Estimate noise outside the signal mask for a pb-corrected cube.
+    '''
 
     cube = SpectralCube.read(cube_name)
     pb_hdu = fits.open(pb_name)
