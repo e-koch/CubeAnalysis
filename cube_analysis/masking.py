@@ -834,7 +834,10 @@ def noise_estimation(cube_name, pb_name, mask_name):
         # Estimate noise from outside the mask.
         # Remove the pb correction just for noise estimation at the centre
         # of the field.
-        stds[chan] = mad_std((cube[0] * pb_plane)[~mask_hdu[0].data[chan].astype(bool)])
+        unmasked_idx = np.logical_and(~mask_hdu[0].data[chan].astype(bool),
+                                      np.isfinite(pb_plane))
+
+        stds[chan] = mad_std((cube[0] * pb_plane)[unmasked_idx])
 
     # Estimate rms of column density
     chan_width = np.abs(np.diff(cube.spectral_axis[:3])[0]).to(u.km / u.s)
