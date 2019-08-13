@@ -197,8 +197,11 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
 
     # cube = SpectralCube.read(cube_name)
 
+    # Only want the filename. Not the path
+    cube_name_base = os.path.split(cube_name)[-1]
+
     mask_name = \
-        "{}_source_mask.fits".format(cube_name.rstrip(".fits"))
+        "{}_source_mask.fits".format(cube_name_base.rstrip(".fits"))
 
     mask_name = os.path.join(output_folder, mask_name)
 
