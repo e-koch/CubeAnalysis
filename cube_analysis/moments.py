@@ -128,8 +128,10 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     # Now create the moment 1 and save it. Make a linewidth one too.
 
+    cube_base_name = os.path.split(cube_name)[-1]
+
     moment0 = cube.moment0(how=how)
-    moment0_name = "{}.mom0.fits".format(cube_name.rstrip(".fits"))
+    moment0_name = "{}.mom0.fits".format(cube_base_name.rstrip(".fits"))
     moment0.write(os.path.join(output_folder, moment0_name),
                   overwrite=True)
 
@@ -137,13 +139,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     moment1[moment1 < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
     moment1[moment1 > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
 
-    moment1_name = "{}.mom1.fits".format(cube_name.rstrip(".fits"))
+    moment1_name = "{}.mom1.fits".format(cube_base_name.rstrip(".fits"))
     moment1.header["BITPIX"] = -32
     moment1.write(os.path.join(moment1_name),
                   overwrite=True)
 
     linewidth = cube.linewidth_sigma(how=how)
-    lwidth_name = "{}.lwidth.fits".format(cube_name.rstrip(".fits"))
+    lwidth_name = "{}.lwidth.fits".format(cube_base_name.rstrip(".fits"))
     linewidth.write(os.path.join(lwidth_name),
                     overwrite=True)
 
@@ -152,7 +154,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     # Normalize third moment by the linewidth to get the skewness
     skew = mom3 / linewidth ** 3
-    skew_name = "{}.skewness.fits".format(cube_name.rstrip(".fits"))
+    skew_name = "{}.skewness.fits".format(cube_base_name.rstrip(".fits"))
     skew.write(os.path.join(skew_name),
                overwrite=True)
 
@@ -180,7 +182,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     else:
         peak_temps = maxima
 
-    peaktemps_name = "{}.peaktemps.fits".format(cube_name.rstrip(".fits"))
+    peaktemps_name = "{}.peaktemps.fits".format(cube_base_name.rstrip(".fits"))
     peak_temps.write(peaktemps_name, overwrite=True)
 
     if make_peakvels:
@@ -196,7 +198,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
         peakvels = peakvels.astype(np.float32)
         peakvels.header["BITPIX"] = -32
-        peakvels_name = "{}.peakvels.fits".format(cube_name.rstrip(".fits"))
+        peakvels_name = "{}.peakvels.fits".format(cube_base_name.rstrip(".fits"))
         peakvels.write(peakvels_name, overwrite=True)
 
 
