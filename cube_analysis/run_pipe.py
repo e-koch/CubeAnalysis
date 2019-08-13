@@ -11,6 +11,7 @@ def run_pipeline(cube_name, output_folder,
                  apply_pbmasking=True,
                  pb_file=None, pb_lim=0.5,
                  convolve_to_common_beam=False, combeam_kwargs={},
+                 skip_existing_mask=False,
                  masking_kwargs={}, moment_kwargs={}):
     '''
     Mask and create moment arrays for a given PPV cube.
@@ -70,7 +71,7 @@ def run_pipeline(cube_name, output_folder,
     mask_name = \
         "{}_source_mask.fits".format(cube_name_pbmask.rstrip(".fits"))
 
-    if os.path.exists(mask_name):
+    if os.path.exists(mask_name) and skip_existing_mask:
         log.info("Found existing signal masking. Skipping to making moment "
                  "images.")
     else:
