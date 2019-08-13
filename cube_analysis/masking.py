@@ -787,3 +787,34 @@ def sigma_rob(data, iterations=1, thresh=3.0, axis=None):
         ind = (np.abs(data) <= thresh * noise).nonzero()
         noise = mad_std(data[ind], axis=axis)
     return noise
+
+
+def noise_estimation(cube_name, pb_name, mask_name):
+
+    cube = SpectralCube.read(cube_name)
+    pb_hdu = fits.open(pb_name)
+    mask_hdu = fits.open(mask_name)
+
+    if len(pb_hdu[0].shape) == 2:
+        pb_plane = pb_hdu[0].data
+    elif len(pb_hdu[0].shape) == 3:
+        pb_plane = pb_hdu[0].data[0]
+    else:
+        ValueError("pb file must be 2D or 3D!")
+
+    del pb_hdu
+
+    assert cube.shape == mask_hdu[0].shape
+
+    stds = np.zeros_like(cube.spectral_axis) * cube.unit
+    for chan in range(cube.shape[0]):
+        # Estimate noise from outside the mask.
+        # Remove the pb correction just for noise estimation at the centre
+        # of the field.
+        stds[chan] = mad_std((cube[0] * pb_plane)[mask_hdu[0].data[chan] != 1])
+
+    # Estimate rms of column density
+    chan_width = np.abs(np.diff(cube.spectral_axis[:3])[0]).to(u.km / u.s)
+    coldens_rms = stds * chan_width * 1.82e18 * u.cm**-2 / (u.K * u.km / u.s)
+
+    return stds, coldens_rms
