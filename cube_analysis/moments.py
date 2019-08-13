@@ -82,6 +82,34 @@ def find_peakvelocity(cube, source_mask=None, chunk_size=1e4, smooth_size=None,
     return peakvels
 
 
+def find_peakvelocity_cube(cube, smooth_size=None,
+                           pb_mask=None,
+                           num_cores=1, verbose=False,
+                           how='cube'):
+    '''
+    Make peak velocity map with cube operations.
+    '''
+
+    if smooth_size is not None:
+        kern = Gaussian1DKernel(smooth_size)
+        parallel = True if num_cores > 1 else False
+        smooth_cube = cube.spectral_smooth(kern,
+                                           parallel=parallel,
+                                           num_cores=num_cores)
+
+    else:
+        smooth_cube = cube
+
+    argmax_plane = smooth_cube.argmax(axis=0, how=how)
+
+    peakvels = cube.spectral_axis[argmax_plane]
+
+    if pb_mask is not None:
+        peakvels[~pb_mask] = np.NaN
+
+    return peakvels
+
+
 def make_moments(cube_name, mask_name, output_folder, freq=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
                  in_memory=False, smooth_size=None,
@@ -142,12 +170,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
         cube.allow_huge_operations = True
     maxima = cube.max(axis=0, how=how)
     if freq is not None:
-        if hasattr(cube, 'beams'):
-            peak_temps = maxima * cube.beams.largest_beam().jtok(freq)
-        elif hasattr(cube, 'beam'):
-            peak_temps = maxima * cube.beam.jtok(freq)
-        else:
-            log.info("No beam object found. Cannot convert to K.")
+        if not cube.unit.is_equivalent(u.K):
+            if hasattr(cube, 'beams'):
+                peak_temps = maxima * cube.beams.largest_beam().jtok(freq)
+            elif hasattr(cube, 'beam'):
+                peak_temps = maxima * cube.beam.jtok(freq)
+            else:
+                log.info("No beam object found. Cannot convert to K.")
     else:
         peak_temps = maxima
 
@@ -155,10 +184,15 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     peak_temps.write(peaktemps_name, overwrite=True)
 
     if make_peakvels:
-        peakvels = find_peakvelocity(cube, source_mask, chunk_size=chunk_size,
-                                     smooth_size=smooth_size,
-                                     in_memory=in_memory,
-                                     num_cores=num_cores, verbose=verbose)
+        if in_memory:
+            peakvels = find_peakvelocity_cube(cube, smooth_size=smooth_size,
+                                              how=how, num_cores=num_cores)
+        else:
+            peakvels = find_peakvelocity(cube, source_mask,
+                                         chunk_size=chunk_size,
+                                         smooth_size=smooth_size,
+                                         in_memory=in_memory,
+                                         num_cores=num_cores, verbose=verbose)
 
         peakvels = peakvels.astype(np.float32)
         peakvels.header["BITPIX"] = -32
