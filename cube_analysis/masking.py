@@ -264,12 +264,29 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
 def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10,
                              peak_snr=5., min_snr=2,
                              edge_thresh=1, show_plots=False,
+                             pb_map_name=None,
                              noise_map=None, verbose=False,
                              spatial_kernel='beam'):
     '''
     Create a robust signal mask by requiring spatial and spectral
     connectivity.
     '''
+
+    # Load in the pb map. If it's a cube, take the first channel and assume
+    # The coverage is constant in the spectral dimension
+    if pb_map_name is not None:
+        pb_hdu = fits.open(pb_map_name, mode='denywrite')[0]
+        if len(pb_hdu.shape) == 3:
+            pb_map = pb_hdu.data[0].copy()
+        elif len(pb_hdu.shape) == 2:
+            pb_map = pb_hdu.data.copy()
+        else:
+            raise ValueError("pb_map must have 2 or 3 dimensions.")
+
+        del pb_hdu
+    else:
+        pb_map = np.ones(cube.shape[1:])
+
 
     pixscale = proj_plane_pixel_scales(cube.wcs)[0]
 
@@ -316,7 +333,7 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10,
                                                        cube.unit))
 
         try:
-            snr = (cube.filled_data[:] / noise_map).to(u.dimensionless_unscaled).value
+            snr = (cube.filled_data[:] / noise_map / pb_map).to(u.dimensionless_unscaled).value
         except Exception as e:
             print(e)
             print("You may have to allow for huge cube operations.")
