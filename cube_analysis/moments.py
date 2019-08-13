@@ -130,11 +130,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     cube_base_name = os.path.split(cube_name)[-1]
 
+    log.info(f"Making moment 0 from cube {cube_base_name}")
     moment0 = cube.moment0(how=how)
     moment0_name = "{}.mom0.fits".format(cube_base_name.rstrip(".fits"))
     moment0.write(os.path.join(output_folder, moment0_name),
                   overwrite=True)
 
+    log.info(f"Making moment 1 from cube {cube_base_name}")
     moment1 = cube.moment1(how=how).astype(np.float32)
     moment1[moment1 < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
     moment1[moment1 > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
@@ -144,12 +146,14 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     moment1.write(os.path.join(moment1_name),
                   overwrite=True)
 
+    log.info(f"Making line width from cube {cube_base_name}")
     linewidth = cube.linewidth_sigma(how=how)
     lwidth_name = "{}.lwidth.fits".format(cube_base_name.rstrip(".fits"))
     linewidth.write(os.path.join(lwidth_name),
                     overwrite=True)
 
     # Skewness
+    log.info(f"Making skewness from cube {cube_base_name}")
     mom3 = cube.moment(order=3, axis=0, how=how)
 
     # Normalize third moment by the linewidth to get the skewness
@@ -159,6 +163,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
                overwrite=True)
 
     # Kurtosis: Uncorrected
+    log.info(f"Making kurtosis from cube {cube_base_name}")
     mom4 = cube.moment(order=4, axis=0, how=how)
     # Normalize third moment by the linewidth to get the skewness
     # And subtract 3 to correct for Gaussian kurtosis of 3.
@@ -170,6 +175,9 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     # Peak temperature map. And convert to K
     if in_memory:
         cube.allow_huge_operations = True
+
+    log.info(f"Making peak temperature from cube {cube_base_name}")
+
     maxima = cube.max(axis=0, how=how)
     if freq is not None:
         if not cube.unit.is_equivalent(u.K):
@@ -185,6 +193,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     peaktemps_name = "{}.peaktemps.fits".format(cube_base_name.rstrip(".fits"))
     peak_temps.write(peaktemps_name, overwrite=True)
 
+    log.info(f"Making peak velocity from cube {cube_base_name}")
     if make_peakvels:
         if in_memory:
             peakvels = find_peakvelocity_cube(cube, smooth_size=smooth_size,
