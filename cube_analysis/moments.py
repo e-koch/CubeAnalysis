@@ -143,13 +143,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     moment1_name = "{}.mom1.fits".format(cube_base_name.rstrip(".fits"))
     moment1.header["BITPIX"] = -32
-    moment1.write(os.path.join(moment1_name),
+    moment1.write(os.path.join(output_folder, moment1_name),
                   overwrite=True)
 
     log.info(f"Making line width from cube {cube_base_name}")
     linewidth = cube.linewidth_sigma(how=how)
     lwidth_name = "{}.lwidth.fits".format(cube_base_name.rstrip(".fits"))
-    linewidth.write(os.path.join(lwidth_name),
+    linewidth.write(os.path.join(output_folder, lwidth_name),
                     overwrite=True)
 
     # Skewness
@@ -159,7 +159,7 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     # Normalize third moment by the linewidth to get the skewness
     skew = mom3 / linewidth ** 3
     skew_name = "{}.skewness.fits".format(cube_base_name.rstrip(".fits"))
-    skew.write(os.path.join(skew_name),
+    skew.write(os.path.join(output_folder, skew_name),
                overwrite=True)
 
     # Kurtosis: Uncorrected
@@ -168,8 +168,8 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     # Normalize third moment by the linewidth to get the skewness
     # And subtract 3 to correct for Gaussian kurtosis of 3.
     kurt = (mom4 / linewidth ** 4) - 3
-    kurt_name = "{}.kurtosis.fits".format(cube_name.rstrip(".fits"))
-    kurt.write(kurt_name,
+    kurt_name = "{}.kurtosis.fits".format(cube_base_name.rstrip(".fits"))
+    kurt.write(os.path.join(output_folder, kurt_name),
                overwrite=True)
 
     # Peak temperature map. And convert to K
@@ -191,7 +191,8 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
         peak_temps = maxima
 
     peaktemps_name = "{}.peaktemps.fits".format(cube_base_name.rstrip(".fits"))
-    peak_temps.write(peaktemps_name, overwrite=True)
+    peak_temps.write(os.path.join(output_folder, peaktemps_name),
+                     overwrite=True)
 
     log.info(f"Making peak velocity from cube {cube_base_name}")
     if make_peakvels:
@@ -207,8 +208,10 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
         peakvels = peakvels.astype(np.float32)
         peakvels.header["BITPIX"] = -32
-        peakvels_name = "{}.peakvels.fits".format(cube_base_name.rstrip(".fits"))
-        peakvels.write(peakvels_name, overwrite=True)
+        peakvels_name = \
+            "{}.peakvels.fits".format(cube_base_name.rstrip(".fits"))
+        peakvels.write(os.path.join(output_folder, peakvels_name),
+                       overwrite=True)
 
 
 def find_moment_names(path):
