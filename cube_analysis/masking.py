@@ -837,7 +837,7 @@ def noise_estimation(cube_name, pb_name, mask_name):
         unmasked_idx = np.logical_and(~mask_hdu[0].data[chan].astype(bool),
                                       np.isfinite(pb_plane))
 
-        stds[chan] = mad_std((cube[0] * pb_plane)[unmasked_idx])
+        stds[chan] = mad_std((cube[0] * pb_plane.value)[unmasked_idx])
 
     # Estimate rms of column density
     chan_width = np.abs(np.diff(cube.spectral_axis[:3])[0]).to(u.km / u.s)
