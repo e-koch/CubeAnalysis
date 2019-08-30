@@ -8,6 +8,7 @@ from astropy.wcs import WCS, WcsError
 import os
 from itertools import repeat
 import numpy as np
+from astropy.convolution import convolve_fft
 
 from .io_utils import create_huge_fits, save_to_huge_fits
 
@@ -60,6 +61,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         if isinstance(cube, VaryingResolutionSpectralCube):
             log.info("This is a VaryingResolutionSpectralCube. Convolving to a"
                      " common beam before performing spectral interpolation.")
+            # Enable >1 GB operations
+            def myconvolve(*args, **kwargs):
+                return convolve_fft(*args, **kwargs, allow_huge=True)
+
             cube = cube.convolve_to(common_beam(cube.beams))
 
         cube = cube.spectral_interpolate(targ_cube.spectral_axis)
@@ -151,7 +156,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         proj = cube[chan]
 
         if common_beam:
-            proj = proj.convolve_to(beam)
+            # Enable >1 GB operations
+            def myconvolve(*args, **kwargs):
+                return convolve_fft(*args, **kwargs, allow_huge=True)
+            proj = proj.convolve_to(beam, convolve=myconvolve)
 
         proj = proj.reproject(targ_header).value.astype(targ_dtype)
 
