@@ -4,6 +4,7 @@ from astropy import log
 from datetime import datetime
 
 from .masking import pb_masking, signal_masking, common_beam_convolve
+from .cube_utils import convert_K
 from .moments import make_moments
 
 
@@ -11,6 +12,7 @@ def run_pipeline(cube_name, output_folder,
                  apply_pbmasking=True,
                  pb_file=None, pb_lim=0.5,
                  convolve_to_common_beam=False, combeam_kwargs={},
+                 convert_to_K=False, convert_K_kwargs={'verbose': False},
                  skip_existing_mask=False,
                  masking_kwargs={}, moment_kwargs={}):
     '''
@@ -64,6 +66,14 @@ def run_pipeline(cube_name, output_folder,
         tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         log.info("Convolving to a common beam at {}".format(tstamp))
         common_beam_convolve(cube_name_pbmask, output_folder, **combeam_kwargs)
+
+    if convert_to_K:
+        log.info("Converting cube to K. Will use K version for moments.")
+        tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        log.info("Converting cube to K at {}".format(tstamp))
+        convert_K(cube_name_pbmask, output_folder, **convert_K_kwargs)
+
+        cube_name_pbmask = f"{cube_name_pbmask.rstrip('.fits')}_K.fits"
 
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log.info("Starting signal masking at {}".format(tstamp))
