@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.widgets import LassoSelector
+import os
 
 from spectral_cube import SpectralCube
 from astropy.io import fits
@@ -159,7 +160,8 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
                                return_mask=False, overwrite=False,
                                verbose=True,
                                imshow_kwargs={'origin': 'lower'},
-                               fig=None):
+                               fig=None,
+                               start_from=0):
     '''
     Step through each channel in a cube and interactively draw a mask.
 
@@ -168,7 +170,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
 
     '''
 
-    if fig is not None:
+    if fig is None:
         fig = plt.figure()
 
     if in_memory:
@@ -185,6 +187,9 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
             iter = range(nchan)
 
         for chan in iter:
+            if chan < start_from:
+                continue
+
             interact_mask = make_interactive_image_mask(cube.unitless_filled_data[chan],
                                                         fig=fig,
                                                         imshow_kwargs=imshow_kwargs)
@@ -203,7 +208,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
         mask_hdr['BUNIT'] = ('', "Boolean")
 
         # Change BITPIX
-        dtype = np.uint8
+        dtype = np.dtype('uint8')
         name = dtype.name if hasattr(dtype, "name") else dtype
         mask_hdr['BITPIX'] = fits.DTYPE2BITPIX[name]
 
@@ -224,11 +229,16 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
         mask_hdr['BUNIT'] = ('', "Boolean")
 
         # Change BITPIX
-        dtype = np.uint8
+        dtype = np.dtype('uint8')
         name = dtype.name if hasattr(dtype, "name") else dtype
         mask_hdr['BITPIX'] = fits.DTYPE2BITPIX[name]
 
-        create_huge_fits(output_name, mask_hdr, verbose=verbose)
+        if not os.path.exists(output_name):
+            create_huge_fits(output_name, mask_hdr, verbose=verbose)
+        else:
+            if not overwrite:
+                raise ValueError(f"{output_name} already exists. Enable "
+                                 "`overwrite` or delete existing file.")
 
         if verbose:
             iter = ProgressBar(nchan)
@@ -236,6 +246,8 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
             iter = range(nchan)
 
         for chan in iter:
+            if chan < start_from:
+                continue
 
             cube_hdu = fits.open(cube_name, mode='denywrite', memmap=True)
             mask_hdu = fits.open(output_name, mode='update')
@@ -248,7 +260,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
             channel_mask = np.logical_and(interact_mask,
                                           np.isfinite(cube_hdu[0].data[chan]))
 
-            mask_hdu.data[chan] = channel_mask.astype(np.uint8)
+            mask_hdu[0].data[chan] = channel_mask.astype(np.uint8)
 
             mask_hdu.flush()
             mask_hdu.close()
