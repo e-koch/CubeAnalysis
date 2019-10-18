@@ -14,6 +14,7 @@ def run_pipeline(cube_name, output_folder,
                  convolve_to_common_beam=False, combeam_kwargs={},
                  convert_to_K=False, convert_K_kwargs={'verbose': False},
                  skip_existing_mask=False,
+                 custom_mask_name=None,
                  masking_kwargs={}, moment_kwargs={}):
     '''
     Mask and create moment arrays for a given PPV cube.
@@ -90,6 +91,7 @@ def run_pipeline(cube_name, output_folder,
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log.info("Starting moment making at {}".format(tstamp))
     make_moments(cube_name_pbmask, mask_name, output_folder,
+                 custom_mask_name=custom_mask_name,
                  **moment_kwargs)
 
     tstamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

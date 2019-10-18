@@ -31,7 +31,9 @@ def _peak_velocity(args):
         return spec.spectral_axis[argmax]
 
 
-def find_peakvelocity(cube_name, mask_name=None, chunk_size=1e4,
+def find_peakvelocity(cube_name, mask_name=None,
+                      source_mask=None,
+                      chunk_size=1e4,
                       smooth_size=None,
                       # in_memory=False, num_cores=1,
                       spectral_slice=slice(None),
@@ -56,8 +58,9 @@ def find_peakvelocity(cube_name, mask_name=None, chunk_size=1e4,
 
     # Now read in the source mask
 
-    if mask_name is not None:
-        source_mask = fits.getdata(mask_name)
+    if mask_name is not None or source_mask is not None:
+        if source_mask is None:
+            source_mask = fits.getdata(mask_name)
         source_mask_spatial = source_mask.sum(0) > 0
         posns = np.where(source_mask_spatial)
     else:
@@ -153,6 +156,7 @@ def find_peakvelocity_cube(cube, smooth_size=None,
 
 
 def make_moments(cube_name, mask_name, output_folder, freq=None,
+                 custom_mask_name=None,
                  num_cores=1, verbose=False, chunk_size=1e4,
                  in_memory=False, smooth_size=None,
                  how='slice', make_peakvels=True,
@@ -167,6 +171,14 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     source_mask = fits.getdata(mask_name)
     source_mask = source_mask.astype(np.bool)
 
+    # Allow loading in a custom mask to combine with the signal mask
+    # For cases like M31 where the MW emission needs to be manually flagged
+    if custom_mask_name is not None:
+        custom_mask = fits.getdata(custom_mask_name)
+        custom_mask = custom_mask.astype(np.bool)
+
+        source_mask = np.logical_and(source_mask, custom_mask)
+
     cube = cube.with_mask(source_mask)
 
     # Now create the moment 1 and save it. Make a linewidth one too.
@@ -174,13 +186,13 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
     cube_base_name = os.path.split(cube_name)[-1]
 
     log.info(f"Making moment 0 from cube {cube_base_name}")
-    moment0 = cube.moment0[spectral_slice](how=how)
+    moment0 = cube[spectral_slice].moment0(how=how)
     moment0_name = "{}.mom0.fits".format(cube_base_name.rstrip(".fits"))
     moment0.write(os.path.join(output_folder, moment0_name),
                   overwrite=True)
 
     log.info(f"Making moment 1 from cube {cube_base_name}")
-    moment1 = cube.moment1[spectral_slice](how=how).astype(np.float32)
+    moment1 = cube[spectral_slice].moment1(how=how).astype(np.float32)
     moment1[moment1 < cube.spectral_extrema[0]] = np.NaN * u.m / u.s
     moment1[moment1 > cube.spectral_extrema[1]] = np.NaN * u.m / u.s
 
@@ -246,10 +258,9 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
                                               spectral_slice=spectral_slice)
         else:
             peakvels = find_peakvelocity(cube_name, mask_name,
+                                         source_mask=source_mask,
                                          chunk_size=chunk_size,
                                          smooth_size=smooth_size,
-                                         in_memory=in_memory,
-                                         num_cores=num_cores,
                                          spectral_slice=spectral_slice,
                                          verbose=verbose)
 
