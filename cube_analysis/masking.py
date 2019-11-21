@@ -1,6 +1,7 @@
 
 from astropy.io import fits
 from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
+from spectral_cube.cube_utils import largest_beam
 import os
 from astropy import log
 import astropy.units as u
@@ -761,7 +762,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
 
 
 def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
-                         verbose=False, roll_along_spec=True):
+                         verbose=False):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
     5 sigma, and contains some minimum number of pixels.
@@ -776,40 +777,21 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
     mask_low = mo.remove_small_objects(mask_low, min_size=min_pix,
                                        connectivity=2)
 
-    # Operations adapted from the PHANGS masking routines.
-    if roll_along_spec:
-        mask_low = mask_low & np.roll(mask_low, 1, axis=0)
-        mask_low = mask_low & np.roll(mask_low, -1, axis=0)
+    # Remove all regions that do not contain a 5 sigma pixel
+    kernel = np.ones((3, 3, 3))
+    labels, num = nd.label(mask_low, kernel)
 
-    # Identify regions by dilating the high mask to the low.
-    mask_final = nd.binary_dilation(mask_high,
-                                    mask=mask_low,
-                                    iterations=-1)
+    iter = range(1, num + 1)
+    if verbose:
+        iter = ProgressBar(iter)
 
-    # Old method is real slow for large data cubes/many labelled regions.
-    # # Remove all regions that do not contain a 5 sigma pixel
-    # kernel = np.ones((3, 3, 3))
-    # labels, num = nd.label(mask_low, kernel)
+    for i in iter:
+        pix = np.where(labels == i)
+        if np.any(mask_high[pix]):
+            continue
+        mask_low[pix] = False
 
-    # # True in mask_high is max when there is a 5-sigma pix
-    # # This can be a memory hog. So let's try removing empty regions.
-    # max_in_high = nd.maximum(mask_high[mask_low],
-    #                          labels[mask_low], range(1, num + 1))
-
-    # # Plus one to account for 0 not being a labels
-    # iter = np.where(max_in_high)[0] + 1
-    # if verbose:
-    #     iter = ProgressBar(iter)
-
-    # # At this point we don't need mask_high anymore.
-    # # Making a new empty mask and deleting mask_high to conserve memory
-    # del mask_high
-    # mask_final = np.zeros_like(mask_low)
-
-    # for i in iter:
-    #     mask_final[np.where(labels == i)] = True
-
-    return cube.with_mask(mask_final), mask_final
+    return cube.with_mask(mask_low), mask_low
 
 
 def round_up_to_odd(f):
