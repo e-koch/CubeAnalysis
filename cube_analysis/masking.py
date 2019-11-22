@@ -761,7 +761,7 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
 
 
 def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
-                         verbose=False, roll_along_spec=True):
+                         min_pix_high=18, verbose=False, roll_along_spec=True):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
     5 sigma, and contains some minimum number of pixels.
@@ -775,6 +775,8 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
 
     mask_low = mo.remove_small_objects(mask_low, min_size=min_pix,
                                        connectivity=2)
+    mask_high = mo.remove_small_objects(mask_high, min_size=min_pix_high,
+                                        connectivity=2)
 
     # Operations adapted from the PHANGS masking routines.
     if roll_along_spec:
