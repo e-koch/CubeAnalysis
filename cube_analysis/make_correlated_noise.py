@@ -77,13 +77,9 @@ def gauss_correlated_noise_2D(shape, sigma, beam_gauss_width,
     with NumpyRNGContext(randomseed):
 
         angles = np.random.uniform(0, 2 * np.pi,
-                                   # size=(imsize, Np1 + 1))
                                    size=freqs.shape)
 
     noise = np.cos(angles) + 1j * np.sin(angles)
-
-    # noise = np.random.normal(size=freqs_yy.shape) \
-    #     + 1j * np.random.normal(size=freqs_yy.shape)
 
     if imsize % 2 == 0:
         noise[1:Np1, 0] = np.conj(noise[imsize:Np1:-1, 0])
