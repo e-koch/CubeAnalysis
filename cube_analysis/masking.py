@@ -247,10 +247,20 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
             raise TypeError("noise_map must be a file name or an array. Found"
                             " type {}".format(type(noise_map)))
 
-        raise NotImplementedError("Need to update this routine.")
+        # raise NotImplementedError("Need to update this routine.")
+
+        cube = SpectralCube.read(cube_name)
 
         masked_cube, mask = ppv_dilation_masking(cube, noise_map,
                                                  **algorithm_kwargs)
+
+        new_header = cube.header.copy()
+        new_header["BUNIT"] = ""
+        new_header["BITPIX"] = 8
+
+        mask_hdu = fits.PrimaryHDU(mask.astype(">i2"), new_header)
+        mask_hdu.writeto(mask_name)
+
     else:
         raise ValueError("method must be 'spectral_spatial' or "
                          "'ppv_dilation'.")
@@ -260,7 +270,6 @@ def signal_masking(cube_name, output_folder, method='ppv_connectivity',
     # new_header = cube.header.copy()
     # new_header["BUNIT"] = ""
     # new_header["BITPIX"] = 8
-
 
     # if is_huge:
     #     save_to_huge_fits(save_name, mask.astype('>i2'), overwrite=True)
