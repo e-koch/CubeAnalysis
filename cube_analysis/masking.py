@@ -21,6 +21,12 @@ try:
 except ImportError:
     SIGNAL_ID_INSTALL = False
 
+try:
+    basestring
+except NameError:
+    basestring = str
+
+
 from .io_utils import create_huge_fits
 from .progressbar import ProgressBar
 
