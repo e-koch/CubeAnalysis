@@ -775,8 +775,12 @@ def _get_mask_edges(snr, min_snr, peak_snr, edge_thresh, num_chans,
     return sequences
 
 
-def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
-                         min_pix_high=18, verbose=False, roll_along_spec=True):
+def ppv_dilation_masking(cube, noise_map=None, min_sig=3, max_sig=5,
+                         min_pix=27, min_pix_high=18,
+                         min_chan=3,
+                         verbose=False,
+                         roll_along_spec=True,
+                         expand_spatial=True):
     '''
     Find connected regions above 3 sigma that contain a pixel at least above
     5 sigma, and contains some minimum number of pixels.
@@ -788,20 +792,42 @@ def ppv_dilation_masking(cube, noise_map, min_sig=3, max_sig=5, min_pix=27,
     mask_low = (cube > min_sig * noise_map).include()
     mask_high = (cube > max_sig * noise_map).include()
 
-    mask_low = mo.remove_small_objects(mask_low, min_size=min_pix,
-                                       connectivity=2)
-    mask_high = mo.remove_small_objects(mask_high, min_size=min_pix_high,
-                                        connectivity=2)
+    # Binary open/close to enfore min # channels in the low mask.
+    spec_kernel = np.array([True] * min_chan).reshape((min_chan, 1, 1))
+    mask_low = nd.binary_opening(mask_low, spec_kernel)
+    mask_low = nd.binary_closing(mask_low, spec_kernel)
 
-    # Operations adapted from the PHANGS masking routines.
-    if roll_along_spec:
-        mask_low = mask_low & np.roll(mask_low, 1, axis=0)
-        mask_low = mask_low & np.roll(mask_low, -1, axis=0)
+    mask_low = mo.remove_small_objects(mask_low, min_size=min_pix,
+                                       connectivity=3)
+
+    mask_high = mo.remove_small_objects(mask_high, min_size=min_pix_high,
+                                        connectivity=3)
+    # We've eliminated features in mask_low based on spectral connectivity
+    # to avoid some being included b/c smaller regions still exist in
+    # mask_high, remove all pixels that are in high but now low.
+    mask_high = nd.binary_erosion(mask_high,
+                                  mask=~mask_low, iterations=-1)
 
     # Identify regions by dilating the high mask to the low.
     mask_final = nd.binary_dilation(mask_high,
                                     mask=mask_low,
                                     iterations=-1)
+
+    mask_final = mo.remove_small_objects(mask_final, min_size=min_pix,
+                                         connectivity=3)
+    mask_final = mo.remove_small_objects(mask_final, min_size=min_pix,
+                                         connectivity=2)
+
+    # Operations adapted from the PHANGS masking routines.
+    if roll_along_spec:
+        mask_final = mask_final + np.roll(mask_final, 1, axis=0)
+        mask_final = mask_final + np.roll(mask_final, -1, axis=0)
+
+    if expand_spatial:
+        # Expand all spatial region in the final mask by 2 pixels.
+        spat_kernel = mo.disk(2, dtype=bool).reshape((1, 5, 5))
+        mask_final = nd.binary_dilation(mask_final, spat_kernel)
+
 
     # Old method is real slow for large data cubes/many labelled regions.
     # # Remove all regions that do not contain a 5 sigma pixel
