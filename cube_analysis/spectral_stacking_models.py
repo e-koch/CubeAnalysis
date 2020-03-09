@@ -206,6 +206,28 @@ def find_hwhm(vels, spectrum, interp_factor=10):
     Return the equivalent Gaussian sigma based on the HWHM positions.
     '''
 
+    fwhm_points, upsamp_vels, interp1 = \
+        find_peak_window(vels, spectrum, interp_factor=interp_factor,
+                         peak_fraction=0.5, return_upsampled=True)
+
+    fwhm = fwhm_points[1] - fwhm_points[0]
+
+    # Convert to equivalent Gaussian sigma
+    sigma = fwhm / np.sqrt(8 * np.log(2))
+
+    upsamp_spec = interp1(upsamp_vels)
+    peak_velocity = upsamp_vels[np.argmax(upsamp_spec)]
+
+    return sigma, fwhm_points, peak_velocity
+
+
+def find_peak_window(vels, spectrum, interp_factor=10, peak_fraction=0.5,
+                     return_upsampled=False):
+    '''
+    Define a spectral window around the peak defined by the
+    peak fraction given.
+    '''
+
     # Model the spectrum with a spline
     # x values must be increasing for the spline, so flip if needed.
     spec_for_interp, vels_for_interp = reorder_spectra(vels, spectrum)
@@ -220,7 +242,7 @@ def find_hwhm(vels, spectrum, interp_factor=10):
                               vels_for_interp.max() + 0.9 * chan_size,
                               vels_for_interp.size * interp_factor)
 
-    halfmax = interp1(upsamp_vels).max() * 0.5
+    halfmax = interp1(upsamp_vels).max() * peak_fraction
 
     interp2 = InterpolatedUnivariateSpline(vels_for_interp,
                                            spec_for_interp - halfmax, k=3)
@@ -231,15 +253,10 @@ def find_hwhm(vels, spectrum, interp_factor=10):
     # Only keep the min/max if there are multiple
     fwhm_points = (min(fwhm_points), max(fwhm_points))
 
-    fwhm = fwhm_points[1] - fwhm_points[0]
+    if return_upsampled:
+        return fwhm_points, upsamp_vels, interp1
 
-    # Convert to equivalent Gaussian sigma
-    sigma = fwhm / np.sqrt(8 * np.log(2))
-
-    upsamp_spec = interp1(upsamp_vels)
-    peak_velocity = upsamp_vels[np.argmax(upsamp_spec)]
-
-    return sigma, fwhm_points, peak_velocity
+    return fwhm_points
 
 
 def _hwhm_fitter(vels, spectrum, hwhm_gauss, asymm='full', sigma_noise=None,
