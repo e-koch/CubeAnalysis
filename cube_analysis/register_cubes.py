@@ -19,6 +19,7 @@ from .spectra_shifter import fourier_shift
 
 def cube_registration(cube, target_cube, verbose=True, num_cores=1,
                       restfreq=1.42040575177 * u.GHz,
+                      check_specaxis=True,
                       **kwargs):
     '''
     Use the DFT method in image_registration to find the offset for each
@@ -28,16 +29,20 @@ def cube_registration(cube, target_cube, verbose=True, num_cores=1,
 
     # We're doing this per-channel, so both cubes need to have the same
     # spectral axis
-    if not np.allclose(cube.spectral_axis.value,
-                       target_cube.spectral_axis.to(cube.spectral_axis.unit).value):
-        raise Warning("The spectral axes do not match. Spectrally regrid the "
-                      "cubes to be the same before feathering.")
+    if check_specaxis:
+        if not np.allclose(cube.spectral_axis.value,
+                           target_cube.spectral_axis.to(cube.spectral_axis.unit).value):
+            raise Warning("The spectral axes do not match. Spectrally regrid the "
+                          "cubes to be the same before feathering.")
+    else:
+        if cube.shape[0] != target_cube.shape[0]:
+            raise ValueError(f"Cube does not match target cube spectral shape.")
 
     freqs = cube.with_spectral_unit(u.Hz, velocity_convention='radio',
                                     rest_value=restfreq).spectral_axis
 
     cubegen = ((i, cube[i], target_cube[i], freqs[i])
-               for i in xrange(cube.shape[0]))
+               for i in range(cube.shape[0]))
 
     with _map_context(num_cores, verbose=verbose,
                       num_jobs=cube.shape[0]) as map:
@@ -97,7 +102,7 @@ def _register(args):
     # Now register
     # Assume that the image are reasonably close -- 20% of the smallest
     # spatial axis
-    maxoff = min(targ_plane.shape) * 0.2
+    maxoff = int(min(targ_plane.shape) * 0.2)
     # Upsample by the ratio between the image sizes.
     usfac = min(targ_plane_shape) / float(min(plane_shape))
     if usfac < 1:
@@ -130,7 +135,7 @@ def spatial_shift_cube(cube, dy, dx, verbose=True, save_shifted=True,
     channels = np.arange(num_chans)
     chunked_channels = \
         np.array_split(channels,
-                       [chunk * i for i in xrange(num_chans / chunk)])
+                       [chunk * i for i in range(num_chans / chunk)])
     if chunked_channels[-1].size == 0:
         chunked_channels = chunked_channels[:-1]
 
