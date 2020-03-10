@@ -63,7 +63,6 @@ def sample_at_channels(np.ndarray[np.float64_t, ndim=1] vels,
     cdef np.ndarray[np.float64_t, ndim=1] spec = np.zeros_like(vels)
 
     cdef double half_chan_width = (vels[1] - vels[0]) / 2.
-    cdef double chan_width = abs(vels[1] - vels[0])
 
     cdef int i = 0
 
@@ -71,8 +70,15 @@ def sample_at_channels(np.ndarray[np.float64_t, ndim=1] vels,
 
     for vel in vels:
 
-        bin_mask = np.logical_and(upsamp_vels >= vel - half_chan_width,
-                                  upsamp_vels <= vel + half_chan_width)
+        if half_chan_width < 0:
+            bin_mask = np.logical_and(upsamp_vels >= vel + half_chan_width,
+                                      upsamp_vels <= vel - half_chan_width)
+        else:
+            bin_mask = np.logical_and(upsamp_vels >= vel - half_chan_width,
+                                      upsamp_vels <= vel + half_chan_width)
+
+        if bin_mask.max() == 0:
+            raise ValueError("No model values found in bin.")
 
         spec[i] = values[bin_mask].mean()
 
