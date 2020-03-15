@@ -12,6 +12,7 @@ import numpy as np
 from astropy import log
 from spectral_cube import SpectralCube
 from astropy.io import fits
+from datetime import datetime
 
 import sys
 if sys.version_info < (3, 0):
@@ -60,9 +61,12 @@ def cube_fitter(cube_name,
     y_chunks = get_channel_chunks(posns[0].size, chunks)
     x_chunks = get_channel_chunks(posns[1].size, chunks)
 
+    start_time = datetime.now()
+
     for i, (y_chunk, x_chunk) in enumerate(zip(y_chunks, x_chunks)):
 
-        log.info("On chunk {0} of {1}".format(i + 1, len(y_chunks)))
+        log.info("On chunk {0} of {1} at {2}".format(i + 1, len(y_chunks),
+                                                     datetime.now()))
 
         cube = SpectralCube.read(cube_name)
         if mask_name is not None:
@@ -102,6 +106,10 @@ def cube_fitter(cube_name,
         param_cube[i][empty_posns] = np.NaN
         error_cube[i][empty_posns] = np.NaN
     fit_statistic[empty_posns] = np.NaN
+
+    end_time = datetime.now()
+
+    log.info(f"Elapsed time to fit cube {end_time - start_time}.")
 
     return param_cube, error_cube, fit_statistic
 
