@@ -101,8 +101,9 @@ def cube_fitter(cube_name,
     for i in range(npars):
         param_cube[i][empty_posns] = np.NaN
         error_cube[i][empty_posns] = np.NaN
+    fit_statistic[empty_posns] = np.NaN
 
-    return param_cube, error_cube
+    return param_cube, error_cube, fit_statistic
 
 
 def _fitter(inp_args):
