@@ -1,5 +1,5 @@
 
-from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
+from spectral_cube import SpectralCube, VaryingResolutionSpectralCube, OneDSpectrum
 from astropy.io import fits
 import astropy.units as u
 import os
@@ -107,7 +107,7 @@ def spectral_interpolate(cube_name, output_name,
     # Only need to change BUNIT
     new_hdr = hdr.copy()
     new_hdr['NAXIS3'] = spec_axis.size
-    new_hdr['CDELT3'] = newchan_width.value
+    new_hdr['CDELT3'] = newchan_width
 
     create_huge_fits(output_name, new_hdr, verbose=verbose)
 
@@ -120,11 +120,18 @@ def spectral_interpolate(cube_name, output_name,
 
         cube = SpectralCube.read(cube_name)
 
-        spec = cube[:, yy, xx].spectral_interpolate(spec_axis)
+        spec = cube[:, yy, xx]
+
+        new_spec = OneDSpectrum(spec.unitless_filled_data[:],
+                                wcs=spec.wcs,
+                                beam=com_beam,
+                                meta=spec.meta)
+
+        new_spec = new_spec.spectral_interpolate(spec_axis)
 
         hdu = fits.open(output_name, mode='update')
 
-        hdu[0].data[:, yy, xx] = spec.unitless_filled_data[:].value
+        hdu[0].data[:, yy, xx] = new_spec.unitless_filled_data[:]
 
         hdu.flush()
         hdu.close()
