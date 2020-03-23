@@ -82,7 +82,7 @@ def spectral_interpolate(cube_name, output_name,
     cube = SpectralCube.read(cube_name)
 
     if hasattr(cube, 'beams'):
-        com_beam = cube.common_beam()
+        com_beam = cube.beams.common_beam()
     else:
         com_beam = cube.beam
 
