@@ -5,6 +5,7 @@ import astropy.units as u
 import os
 import numpy as np
 from astropy import log
+from tqdm import tqdm
 
 from .io_utils import create_huge_fits
 from .progressbar import ProgressBar
@@ -68,10 +69,11 @@ def convert_K(cube_name, output_folder, is_huge=True, verbose=False):
 
 def spectral_interpolate(cube_name, output_name,
                          nchan,
-                         chunk=10000,
+                         spatial_chunk=(256, 256),
                          verbose=False):
     '''
-    Interpolate to a new integer channel width set by `nchan`.
+    Interpolate to a new integer channel width set by `nchan`,
+    splitting a cube into spatial chunks to avoid memory issues.
 
     .. warning:: Does not spectrally smooth.
 
@@ -83,8 +85,10 @@ def spectral_interpolate(cube_name, output_name,
 
     if hasattr(cube, 'beams'):
         com_beam = cube.beams.common_beam()
+        has_beams = True
     else:
         com_beam = cube.beam
+        has_beams = False
 
     spat_shape = cube.shape[1:]
 
@@ -111,44 +115,60 @@ def spectral_interpolate(cube_name, output_name,
 
     create_huge_fits(output_name, new_hdr, verbose=verbose)
 
-    nchunk = np.product(spat_shape) // chunk + 1
+    nchunk_shape = [int(np.ceil(shp / chk)) for shp, chk in
+                    zip(spat_shape, spatial_chunk)]
 
-    for ii, (yy, xx) in enumerate(np.ndindex(spat_shape)):
+    # nchunk = np.product(spat_shape) // chunk + 1
+    nchunk = np.product(nchunk_shape)
 
-        if ii % chunk == 0:
-            log.info("On chunk {0} of {1}".format(ii // chunk, nchunk))
+    # for ii, (yy, xx) in enumerate(np.ndindex(spat_shape)):
+    for ych, xch in tqdm(np.ndindex(tuple(nchunk_shape)),
+                         ascii=True,
+                         desc="Spec. interp. chunks",
+                         total=nchunk):
+
+        ymin = spatial_chunk[0] * ych
+        ymax = min(spatial_chunk[0] * (ych + 1), spat_shape[0])
+
+        xmin = spatial_chunk[1] * xch
+        xmax = min(spatial_chunk[1] * (xch + 1), spat_shape[1])
+
+        spat_slice = (slice(None),
+                      slice(ymin, ymax),
+                      slice(xmin, xmax))
 
         cube = SpectralCube.read(cube_name)
 
-        spec = cube[:, yy, xx]
+        subcube = cube[spat_shape]
 
-        new_spec = OneDSpectrum(spec.unitless_filled_data[:],
-                                wcs=spec.wcs,
-                                beam=com_beam,
-                                meta=spec.meta)
+        if has_beams:
+            subcube = subcube.convolve_to(com_beam)
 
-        new_spec = new_spec.spectral_interpolate(spec_axis)
+        subcube_interp = subcube.spectral_interpolate(spec_axis)
 
         hdu = fits.open(output_name, mode='update')
 
-        hdu[0].data[:, yy, xx] = new_spec.unitless_filled_data[:]
+        hdu[0].data[spat_slice] = subcube_interp.unitless_filled_data[:]
 
         hdu.flush()
         hdu.close()
 
-        del cube
+        del cube, subcube, subcube_interp
 
-    # Since we're overwriting this cube, we have to remove the
-    # beams table and write the beam to the header
-    hdu = fits.open(cube_name, mode='update')
+    if has_beams:
+        # Since we're overwriting this cube, we have to remove the
+        # beams table and write the beam to the header
+        hdu = fits.open(cube_name, mode='update')
 
-    if len(hdu) == 2:
-        del hdu[1]
+        if len(hdu) == 2:
+            del hdu[1]
 
-    hdu[0].header.update(com_beam.to_header_keywords())
+        hdu[0].header.update(com_beam.to_header_keywords())
 
-    if "CASAMBM" in hdu[0].header:
-        del hdu[0].header['CASAMBM']
+        if "CASAMBM" in hdu[0].header:
+            del hdu[0].header['CASAMBM']
 
-    hdu.flush()
-    hdu.close()
+        hdu.flush()
+        hdu.close()
+
+        del hdu
