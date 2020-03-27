@@ -133,13 +133,13 @@ def spectral_interpolate(cube_name, output_name,
         xmin = spatial_chunk[1] * xch
         xmax = min(spatial_chunk[1] * (xch + 1), spat_shape[1])
 
-        spat_slice = (slice(None),
-                      slice(ymin, ymax),
-                      slice(xmin, xmax))
+        # spat_slice = (slice(None),
+        #               slice(ymin, ymax),
+        #               slice(xmin, xmax))
 
         cube = SpectralCube.read(cube_name)
 
-        subcube = cube[spat_shape]
+        subcube = cube[:, ymin:ymax, xmin:xmax]
 
         if has_beams:
             subcube = subcube.convolve_to(com_beam)
@@ -148,7 +148,7 @@ def spectral_interpolate(cube_name, output_name,
 
         hdu = fits.open(output_name, mode='update')
 
-        hdu[0].data[spat_slice] = subcube_interp.unitless_filled_data[:]
+        hdu[0].data[:, ymin:ymax, xmin:xmax] = subcube_interp.unitless_filled_data[:]
 
         hdu.flush()
         hdu.close()
