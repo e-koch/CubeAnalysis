@@ -30,6 +30,7 @@ def cube_fitter(cube_name,
                 err_map=None,
                 vcent_map=None,
                 npars=None,
+                nfit_stats=1,
                 verbose=False, num_cores=1, chunks=10000):
     '''
     Split fitting the cube in chunks. Return the parameters, uncertainties,
@@ -93,19 +94,20 @@ def cube_fitter(cube_name,
 
             param_cube = np.empty((npars, ) + spatial_mask.shape)
             error_cube = np.empty((npars, ) + spatial_mask.shape)
-            fit_statistic = np.empty(spatial_mask.shape)
+            fit_statistic = np.empty((nfit_stats, ) + spatial_mask.shape)
 
         for out, y, x in zip(out_params, posns[0][y_chunk],
                              posns[1][x_chunk]):
             param_cube[:, y, x] = out[0]
             error_cube[:, y, x] = out[1]
-            fit_statistic[y, x] = out[2]
+            fit_statistic[:, y, x] = out[2]
 
     empty_posns = np.where(~spatial_mask)
     for i in range(npars):
         param_cube[i][empty_posns] = np.NaN
         error_cube[i][empty_posns] = np.NaN
-    fit_statistic[empty_posns] = np.NaN
+    for i in range(nfit_stats):
+        fit_statistic[i][empty_posns] = np.NaN
 
     end_time = datetime.now()
 
