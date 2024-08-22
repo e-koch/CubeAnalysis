@@ -87,7 +87,7 @@ def radial_profile(gal, moment, header=None, dr=100 * u.pc,
 
     dr = dr.to(u.kpc).value
 
-    nbins = np.int(np.floor(max_rad / dr))
+    nbins = int(np.floor(max_rad / dr))
 
     inneredge = np.linspace(0, max_rad, nbins)
     outeredge = np.linspace(0 + dr, max_rad + dr, nbins)
@@ -198,7 +198,7 @@ def surfdens_radial_profile(gal, header=None, cube=None,
 
     dr = dr.to(u.kpc).value
 
-    nbins = np.int(np.floor(max_rad / dr))
+    nbins = int(np.floor(max_rad / dr))
 
     inneredge = np.linspace(0, max_rad, nbins)
     outeredge = np.linspace(0 + dr, max_rad + dr, nbins)
