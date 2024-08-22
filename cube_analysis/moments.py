@@ -251,18 +251,19 @@ def make_moments(cube_name, mask_name, output_folder, freq=None,
 
     log.info(f"Making peak velocity from cube {cube_base_name}")
     if make_peakvels:
-        if in_memory:
-            peakvels = find_peakvelocity_cube(cube[spectral_slice],
-                                              smooth_size=smooth_size,
-                                              how=how, num_cores=num_cores,
-                                              spectral_slice=spectral_slice)
-        else:
-            peakvels = find_peakvelocity(cube_name, mask_name,
-                                         source_mask=source_mask,
-                                         chunk_size=chunk_size,
-                                         smooth_size=smooth_size,
-                                         spectral_slice=spectral_slice,
-                                         verbose=verbose)
+        peakvels = cube.world_argmax(axis=0)
+        # if in_memory:
+        #     peakvels = find_peakvelocity_cube(cube[spectral_slice],
+        #                                       smooth_size=smooth_size,
+        #                                       how=how, num_cores=num_cores,
+        #                                       spectral_slice=spectral_slice)
+        # else:
+        #     peakvels = find_peakvelocity(cube_name, mask_name,
+        #                                  source_mask=source_mask,
+        #                                  chunk_size=chunk_size,
+        #                                  smooth_size=smooth_size,
+        #                                  spectral_slice=spectral_slice,
+        #                                  verbose=verbose)
 
         peakvels = peakvels.astype(np.float32)
         peakvels.header["BITPIX"] = -32

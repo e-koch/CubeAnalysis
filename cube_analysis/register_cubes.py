@@ -5,6 +5,7 @@ Check for positional offsets between the VLA and SD datasets.
 
 from image_registration import register_images
 from spectral_cube import Projection, SpectralCube
+# from radio_beam import BeamError
 from uvcombine.uvcombine import match_flux_units
 
 from astropy import log
@@ -92,9 +93,9 @@ def _register(args):
 
     # Convolve whichever has the larger beam
     if targ_plane.beam != plane.beam:
-        try:
+        if targ_plane.beam > plane.beam:
             plane = plane.convolve_to(targ_plane.beam)
-        except ValueError:
+        else:
             targ_plane = targ_plane.convolve_to(plane.beam)
 
     targ_plane = targ_plane.reproject(plane.header)

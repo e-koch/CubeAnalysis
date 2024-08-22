@@ -144,7 +144,7 @@ def test_hwhm_model():
 
     parvals, parerrs, param_names, hwhm_gauss = \
         fit_hwhm(vels, noisy_model, sigma_noise=0.01,
-                 niters=100)
+                 niters=100)[:-1]
 
     parvals_clean, parerrs_clean = \
         fit_hwhm(vels, model, sigma_noise=0.01,
@@ -181,7 +181,7 @@ def test_hwhm_model_wgauss():
 
     parvals, parerrs, param_names, hwhm_gauss = \
         fit_hwhm(vels, noisy_model, sigma_noise=0.01,
-                 niters=100)
+                 niters=100)[:-1]
 
     parvals_clean, parerrs_clean = \
         fit_hwhm(vels, model, sigma_noise=0.01,
@@ -224,7 +224,7 @@ def test_hwhm_model_asymmwings():
 
     parvals, parerrs, param_names, hwhm_gauss = \
         fit_hwhm(vels, noisy_model, sigma_noise=0.01,
-                 niters=100)
+                 niters=100)[:-1]
 
     parvals_clean, parerrs_clean = \
         fit_hwhm(vels, model, sigma_noise=0.01,
@@ -245,7 +245,7 @@ def test_hwhm_model_asymmwings():
     pos_mask = vels > 0
     neg_mask = vels < 0
 
-    asymm = np.sum(model[neg_mask] - model[pos_mask]) / np.sum(model)
+    asymm = np.sum(model[pos_mask] - model[neg_mask]) / np.sum(model)
     kappa = 0.0
 
     actual_params = [0.1, 0.0, f_wings, sigma_wings, asymm, kappa]
@@ -326,5 +326,7 @@ def test_symm_asymm_fwing():
     # Errors seem to be a bit more asymmetric for f_asymm. Allow
     # a larger range
     avg_sig = 0.5 * ((params[2] - low_lim[2]) + (up_lim[2] - params[2]))
+    print(f_wings, f_symm, f_asymm)
+    print(params, low_lim, up_lim)
     assert_between(f_asymm, params[2], low_lim[2] - 0.5 * avg_sig,
                    up_lim[2] + 0.5 * avg_sig)

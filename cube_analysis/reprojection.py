@@ -1,6 +1,5 @@
 
 from spectral_cube import SpectralCube, VaryingResolutionSpectralCube
-from spectral_cube.cube_utils import largest_beam
 from astropy.utils.console import ProgressBar
 from astropy import log
 from astropy.io import fits
@@ -9,12 +8,15 @@ import os
 from itertools import repeat
 import numpy as np
 from astropy.convolution import convolve_fft
+from reproject import reproject_interp, reproject_adaptive
 
 from .io_utils import create_huge_fits, save_to_huge_fits
 
 
 def reproject_cube(cubename, targ_cubename, output_cubename,
                    output_folder="", reproject_type='all',
+                   reproject_alg='interp',
+                   reproject_order='bicubic',
                    common_beam=False, save_spectral=True,
                    is_huge=True, chunk=100, verbose=True,
                    wcs_check=True):
@@ -31,6 +33,7 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
     targ_cube = SpectralCube.read(targ_cubename)
 
     cube = SpectralCube.read(cubename)
+    cube.allow_huge_operations = True
 
     # Before doing the time-consuming stuff, make sure there are beams
     if common_beam:
@@ -38,7 +41,8 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
             if reproject_type == 'all':
                 beams = targ_cube.beams
             else:
-                beams = repeat(largest_beam(targ_cube.beams))
+                com_beam = targ_cube.beams.common_beam()
+                beams = repeat(com_beam)
         elif hasattr(targ_cube, 'beam'):
             beams = repeat(targ_cube.beam)
         else:
@@ -61,11 +65,10 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
         if isinstance(cube, VaryingResolutionSpectralCube):
             log.info("This is a VaryingResolutionSpectralCube. Convolving to a"
                      " common beam before performing spectral interpolation.")
-            # Enable >1 GB operations
-            def myconvolve(*args, **kwargs):
-                return convolve_fft(*args, **kwargs, allow_huge=True)
 
-            cube = cube.convolve_to(common_beam(cube.beams))
+            com_beam = cube.beams.common_beam()
+
+            cube = cube.convolve_to(com_beam, allow_huge=True)
 
         cube = cube.spectral_interpolate(targ_cube.spectral_axis)
 
@@ -157,11 +160,21 @@ def reproject_cube(cubename, targ_cubename, output_cubename,
 
         if common_beam:
             # Enable >1 GB operations
-            def myconvolve(*args, **kwargs):
-                return convolve_fft(*args, **kwargs, allow_huge=True)
-            proj = proj.convolve_to(beam, convolve=myconvolve)
+            proj = proj.convolve_to(beam, allow_huge=True)
 
-        proj = proj.reproject(targ_header).value.astype(targ_dtype)
+        if reproject_alg == "interp":
+            proj = proj.reproject(targ_header,
+                                  order=reproject_order)
+            proj = proj.value.astype(targ_dtype)
+
+        elif reproject_alg == "adaptive":
+            proj, _ = reproject_adaptive(proj.hdu, targ_header, conserve_flux=False)
+
+            proj = proj.astype(targ_dtype)
+
+        else:
+            raise NotImplementedError
+
 
         output_fits[0].data[chan] = proj
         if chan % chunk == 0:
