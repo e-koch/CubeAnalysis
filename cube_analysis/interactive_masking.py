@@ -72,7 +72,8 @@ class SelectFromImage(object):
         if len(self.lasso.ax.collections) > 0:
             # There should only ever be one contour shown at a time.
             assert len(self.lasso.ax.collections) == 1
-            self.lasso.ax.collections.pop(0)
+            for line in self.lasso.ax.collections:
+                line.remove()
 
         self.lasso.ax.contour(self.mask, colors='k', levels=[0.5],
                               linewidths=3)
@@ -87,7 +88,7 @@ class SelectFromImage(object):
         return self._mask
 
 
-def make_interactive_image_mask(img, fig=None,
+def make_interactive_image_mask(img, fig=None, chan_name="",
                                 imshow_kwargs={'origin': 'lower'}):
     '''
     Make a boolean mask interactively given a 2D image.
@@ -129,7 +130,7 @@ def make_interactive_image_mask(img, fig=None,
         fig.canvas.draw_idle()
 
     cid = fig.canvas.mpl_connect("key_press_event", accept)
-    ax.set_title("Press enter to accept. 'a' for full. 'z' for empty.")
+    ax.set_title(f"{chan_name}\nPress enter to accept. 'a' for full. 'z' for empty.\n'Z' to skip all remaining channels as empty")
 
     while len(event_button) == 0:
         fig.canvas.draw_idle()
@@ -140,11 +141,13 @@ def make_interactive_image_mask(img, fig=None,
     fig.canvas.mpl_disconnect(cid)
 
     if event_button[0] == 'enter':
-        return selector.mask
+        return selector.mask, False
     elif event_button[0] == 'a':
-        return np.ones_like(img, dtype=bool)
+        return np.ones_like(img, dtype=bool), False
     elif event_button[0] == 'z':
-        return np.ones_like(img, dtype=bool)
+        return np.ones_like(img, dtype=bool), False
+    elif event_button[0] == 'Z':
+        return np.ones_like(img, dtype=bool), True
     else:
         raise ValueError("This should not happen...")
 
@@ -190,19 +193,25 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
             if chan < start_from:
                 continue
 
-            interact_mask = make_interactive_image_mask(cube.unitless_filled_data[chan],
-                                                        fig=fig,
-                                                        imshow_kwargs=imshow_kwargs)
+            interact_mask, skip_remaining = \
+                make_interactive_image_mask(cube.unitless_filled_data[chan],
+                                            chan_name=f"Channel {chan} at {cube.spectral_axis[chan]:.2f}",
+                                            fig=fig,
+                                            imshow_kwargs=imshow_kwargs)
 
             # Combine current mask with the mask from the cube.
-            view = (slice(chan), slice(None), slice(None))
-            mask[chan] = np.logical_and(cube.mask.filled(view=view),
+            view = (slice(chan, chan+1), slice(None), slice(None))
+            mask[chan] = np.logical_and(cube.mask.include(view=view),
                                         interact_mask)
 
             fig.clear()
 
             if verbose:
                 iter.update(chan + 1)
+
+            if skip_remaining:
+                print("Skipping remaining channels... Assumes all are empty.")
+                break
 
         mask_hdr = cube.header.copy()
         mask_hdr['BUNIT'] = ('', "Boolean")
@@ -213,7 +222,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
         mask_hdr['BITPIX'] = fits.DTYPE2BITPIX[name]
 
         mask_hdu = fits.PrimaryHDU(mask.astype(dtype), mask_hdr)
-        mask_hdu.write(output_name, overwrite=overwrite)
+        mask_hdu.writeto(output_name, overwrite=overwrite)
 
         if return_mask:
             return mask
@@ -252,9 +261,11 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
             cube_hdu = fits.open(cube_name, mode='denywrite', memmap=True)
             mask_hdu = fits.open(output_name, mode='update')
 
-            interact_mask = make_interactive_image_mask(cube_hdu[0].data[chan],
-                                                        fig=fig,
-                                                        imshow_kwargs=imshow_kwargs)
+            interact_mask, skip_remaining = \
+                make_interactive_image_mask(cube_hdu[0].data[chan],
+                                            fig=fig,
+                                            chan_name=f"Channel {chan}",
+                                            imshow_kwargs=imshow_kwargs)
 
             # Remove NaNs from the cube
             channel_mask = np.logical_and(interact_mask,
@@ -270,3 +281,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
 
             if verbose:
                 iter.update(chan + 1)
+
+            if skip_remaining:
+                print("Skipping remaining channels... Assumes all are empty.")
+                break
