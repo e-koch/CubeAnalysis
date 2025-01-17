@@ -8,7 +8,7 @@ from astropy import log
 from tqdm import tqdm
 
 from .io_utils import create_huge_fits
-from .progressbar import ProgressBar
+from tqdm import tqdm
 
 
 def convert_K(cube_name, output_folder, is_huge=True, verbose=False):
@@ -35,7 +35,7 @@ def convert_K(cube_name, output_folder, is_huge=True, verbose=False):
         create_huge_fits(cube_K_name, new_hdr, verbose=verbose)
 
         if verbose:
-            pbar = ProgressBar(spec_shape)
+            pbar = tqdm(spec_shape)
 
         for chan in range(spec_shape):
 

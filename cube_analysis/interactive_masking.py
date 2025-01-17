@@ -15,7 +15,7 @@ import os
 
 from spectral_cube import SpectralCube
 from astropy.io import fits
-from astropy.utils.console import ProgressBar
+from .progressbar import ProgressBar
 
 from .io_utils import create_huge_fits
 
@@ -130,7 +130,7 @@ def make_interactive_image_mask(img, fig=None, chan_name="",
         fig.canvas.draw_idle()
 
     cid = fig.canvas.mpl_connect("key_press_event", accept)
-    ax.set_title(f"{chan_name}\nPress enter to accept. 'a' for full. 'z' for empty.\n'Z' to skip all remaining channels as empty")
+    ax.set_title(f"{chan_name}\nPress enter to accept. 'a' for full. 'z' for empty.\n'x' to skip all remaining channels as empty")
 
     while len(event_button) == 0:
         fig.canvas.draw_idle()
@@ -145,9 +145,9 @@ def make_interactive_image_mask(img, fig=None, chan_name="",
     elif event_button[0] == 'a':
         return np.ones_like(img, dtype=bool), False
     elif event_button[0] == 'z':
-        return np.ones_like(img, dtype=bool), False
-    elif event_button[0] == 'Z':
-        return np.ones_like(img, dtype=bool), True
+        return np.zeros_like(img, dtype=bool), False
+    elif event_button[0] == 'x':
+        return np.zeros_like(img, dtype=bool), True
     else:
         raise ValueError("This should not happen...")
 
@@ -211,6 +211,7 @@ def make_interactive_cube_mask(cube_name, output_name, in_memory=False,
 
             if skip_remaining:
                 print("Skipping remaining channels... Assumes all are empty.")
+                plt.close(fig)
                 break
 
         mask_hdr = cube.header.copy()

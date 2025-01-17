@@ -28,7 +28,7 @@ except NameError:
 
 
 from .io_utils import create_huge_fits
-from .progressbar import ProgressBar
+from tqdm import tqdm
 
 
 def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True,
@@ -93,7 +93,7 @@ def pb_masking(cube_name, pb_file, pb_lim, output_folder, is_huge=True,
         spat_slice = nd.find_objects(pbcov_plane > pb_lim)[0]
 
         if verbose:
-            pbar = ProgressBar(cube.shape[0])
+            pbar = tqdm(cube.shape[0])
 
         for chan in range(cube.shape[0]):
 
@@ -158,7 +158,7 @@ def common_beam_convolve(cube_name, output_name, is_huge=False, chunk=10,
 
         planes = []
 
-        for chan in ProgressBar(spec_chunk):
+        for chan in tqdm(spec_chunk):
 
             planes.append(cube[chan].convolve_to(com_beam,
                                                  convolve=convolve).value)
@@ -365,7 +365,7 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10,
 
     iter = zip(*posns)
     if verbose:
-        iter = ProgressBar(iter)
+        iter = tqdm(iter)
 
     for i, j in iter:
 
@@ -431,7 +431,7 @@ def ppv_connectivity_masking(cube, smooth_chans=31, min_chan=10,
         # mask = fits.open(mask_name)[0]
 
         if verbose:
-            iter = ProgressBar(mask.shape[0])
+            iter = tqdm(mask.shape[0])
         else:
             iter = range(mask.shape[0])
 
@@ -566,7 +566,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
             del cube
 
         if verbose:
-            iter = ProgressBar(len(y_chunk))
+            iter = tqdm(len(y_chunk))
         else:
             iter = range(len(y_chunk))
 
@@ -664,7 +664,7 @@ def ppv_connectivity_perspec_masking(cube_name, mask_name, smooth_chans=31,
         mask = fits.open(mask_name)[0]
 
         if verbose:
-            iter = ProgressBar(mask.shape[0])
+            iter = tqdm(mask.shape[0])
         else:
             iter = range(mask.shape[0])
 
@@ -842,7 +842,7 @@ def ppv_dilation_masking(cube, noise_map=None, min_sig=3, max_sig=5,
     # # Plus one to account for 0 not being a labels
     # iter = np.where(max_in_high)[0] + 1
     # if verbose:
-    #     iter = ProgressBar(iter)
+    #     iter = tqdm(iter)
 
     # # At this point we don't need mask_high anymore.
     # # Making a new empty mask and deleting mask_high to conserve memory

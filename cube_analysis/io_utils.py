@@ -1,8 +1,7 @@
 
 from astropy.io import fits
 import numpy as np
-from astropy import log
-from astropy.utils.console import ProgressBar
+from tqdm import tqdm
 import os
 
 
@@ -38,7 +37,7 @@ def create_huge_fits(filename, header, shape=None, verbose=True,
         fill_plane *= np.NaN
 
     if verbose:
-        iterat = ProgressBar(shape[min_axis])
+        iterat = tqdm(shape[min_axis])
     else:
         iterat = range(shape[min_axis])
 
