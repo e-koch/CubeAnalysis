@@ -9,7 +9,7 @@ def ProgressBar(niter, **kwargs):
 
 
 '''
-Copyright (c) 2014, spectral-cube developers
+Copyright (c) 2014-2024, spectral-cube developers
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -42,53 +42,32 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 @contextlib.contextmanager
-def _map_context(numcores, verbose=False, num_jobs=None, chunksize=None,
-                 **pool_kwargs):
+def _map_context(numcores, verbose=False, num_jobs=None, chunksize=None,):
     """
     Mapping context manager to allow parallel mapping or regular mapping
     depending on the number of cores specified.
+
+    The builtin map is overloaded to handle python3 problems: python3 returns a
+    generator, while ``multiprocessing.Pool.map`` actually runs the whole thing
     """
-
-    if verbose:
-        if numcores is not None and numcores > 1:
+    if numcores is not None and numcores > 1:
+        try:
+            from joblib import Parallel, delayed
+            from joblib.pool import has_shareable_memory
+            map = lambda x,y: Parallel(n_jobs=numcores)(delayed(has_shareable_memory)(x))(y)
             parallel = True
-        else:
-            numcores = 1
+        except ImportError:
+            map = lambda x,y: list(builtins.map(x,y))
+            warnings.warn("Could not import joblib.  "
+                          "map will be non-parallel.",
+                          ImportError
+                         )
             parallel = False
-        map = lambda func, items: \
-            ProgressBar.map(func, items,
-                            nprocesses=numcores,
-                            multiprocess=parallel,
-                            item_len=num_jobs,
-                            chunksize=chunksize,
-                            **pool_kwargs)
     else:
-        if numcores is not None and numcores > 1:
-            try:
-                import multiprocessing
-                pool = multiprocessing.Pool(processes=numcores, **pool_kwargs)
-                if chunksize is None:
-                    chunksize = 1
+        parallel = False
+        map = lambda x, y: list(builtins.map(x,y))
 
-                map = partial(pool.map, chunksize=chunksize)
-                parallel = True
-            except ImportError:
-                map = builtins.map
-                warnings.warn("Could not import multiprocessing.  "
-                              "map will be non-parallel.")
-                parallel = False
-        else:
-            parallel = False
-            map = builtins.map
-
-    try:
-        yield map
-    finally:
-        # ProgressBar.map already closes the pool
-        if not verbose and parallel:
-                pool.close()
-                pool.join()
-
+    yield map
 
 def choose_chunksize(nprocesses, njobs):
     '''
